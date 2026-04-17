@@ -5,11 +5,11 @@
 // Please see LICENSE files in the repository root for full details.
 
 use anyhow::Context as _;
-use async_graphql::{Context, Description, Enum, ID, InputObject, Object};
+use async_graphql::{Context, Description, Enum, ID, InputObject, Json, Object, SimpleObject};
 use mas_storage::{
     queue::{
         DeactivateUserJob, ProvisionUserJob, QueueJobRepositoryExt as _,
-        SendAccountRecoveryEmailsJob,
+        SendAccountRecoveryEmailsJob, SendEmailAuthenticationCodeJob,
     },
     user::UserRepository,
 };
@@ -437,6 +437,197 @@ impl DeactivateUserPayload {
             Self::IncorrectPassword => None,
         }
     }
+}
+
+/// The input for the `registerUserInitiate` mutation.
+#[derive(InputObject)]
+struct RegisterUserInitiateInput {
+    /// Desired username (localpart).
+    username: String,
+
+    /// Account password.
+    password: String,
+
+    /// Optional email address. Required if server config says so.
+    email: Option<String>,
+
+    /// Optional registration token. Required if server config says so.
+    registration_token: Option<String>,
+}
+
+/// The status of the `registerUserInitiate` mutation.
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum RegisterUserInitiateStatus {
+    /// Registration is complete; user and session were created.
+    Complete,
+
+    /// Additional steps are required before registration finishes.
+    Pending,
+
+    /// Input validation failed.
+    Failed,
+}
+
+/// The payload for the `registerUserInitiate` mutation.
+#[derive(Description)]
+pub enum RegisterUserInitiatePayload {
+    Complete(mas_data_model::User, mas_data_model::BrowserSession),
+    Pending {
+        session_id: ID,
+        next_steps: Vec<RegistrationStep>,
+    },
+    Failed(Vec<RegistrationFieldError>),
+}
+
+/// A step the client must complete to finish registration.
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum RegistrationStepType {
+    EmailVerification,
+    DisplayName,
+    RegistrationToken,
+    Captcha,
+    Terms,
+}
+
+/// A step descriptor.
+#[derive(SimpleObject, Clone)]
+pub struct RegistrationStep {
+    step_type: RegistrationStepType,
+}
+
+/// A field-level validation error.
+#[derive(SimpleObject, Clone)]
+pub struct RegistrationFieldError {
+    field: String,
+    message: String,
+}
+
+#[Object(use_type_description)]
+impl RegisterUserInitiatePayload {
+    async fn status(&self) -> RegisterUserInitiateStatus {
+        match self {
+            Self::Complete(_, _) => RegisterUserInitiateStatus::Complete,
+            Self::Pending { .. } => RegisterUserInitiateStatus::Pending,
+            Self::Failed(_) => RegisterUserInitiateStatus::Failed,
+        }
+    }
+
+    async fn user(&self) -> Option<User> {
+        match self {
+            Self::Complete(user, _) => Some(User(user.clone())),
+            _ => None,
+        }
+    }
+
+    async fn browser_session(&self) -> Option<crate::graphql::model::BrowserSession> {
+        match self {
+            Self::Complete(_, session) => {
+                Some(crate::graphql::model::BrowserSession(session.clone()))
+            }
+            _ => None,
+        }
+    }
+
+    async fn session_id(&self) -> Option<ID> {
+        match self {
+            Self::Pending { session_id, .. } => Some(session_id.clone()),
+            _ => None,
+        }
+    }
+
+    async fn next_steps(&self) -> Option<Vec<RegistrationStep>> {
+        match self {
+            Self::Pending { next_steps, .. } => Some(next_steps.clone()),
+            _ => None,
+        }
+    }
+
+    async fn errors(&self) -> Option<Vec<RegistrationFieldError>> {
+        match self {
+            Self::Failed(errors) => Some(errors.clone()),
+            _ => None,
+        }
+    }
+}
+
+#[derive(InputObject)]
+struct CompleteRegistrationStepInput {
+    session_id: ID,
+    step_type: RegistrationStepType,
+    /// Step-specific data. For EmailVerification: JSON {"code": "123456"}
+    data: Option<Json<serde_json::Value>>,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum CompleteRegistrationStepStatus {
+    Complete,
+    Pending,
+    Failed,
+}
+
+/// The payload for the `completeRegistrationStep` mutation.
+#[derive(Description)]
+pub enum CompleteRegistrationStepPayload {
+    Complete(mas_data_model::User, mas_data_model::BrowserSession),
+    Pending {
+        next_steps: Vec<RegistrationStep>,
+    },
+    Failed(Vec<RegistrationFieldError>),
+}
+
+#[Object(use_type_description)]
+impl CompleteRegistrationStepPayload {
+    async fn status(&self) -> CompleteRegistrationStepStatus {
+        match self {
+            Self::Complete(_, _) => CompleteRegistrationStepStatus::Complete,
+            Self::Pending { .. } => CompleteRegistrationStepStatus::Pending,
+            Self::Failed(_) => CompleteRegistrationStepStatus::Failed,
+        }
+    }
+
+    async fn user(&self) -> Option<User> {
+        match self {
+            Self::Complete(u, _) => Some(User(u.clone())),
+            _ => None,
+        }
+    }
+
+    async fn browser_session(&self) -> Option<crate::graphql::model::BrowserSession> {
+        match self {
+            Self::Complete(_, s) => Some(crate::graphql::model::BrowserSession(s.clone())),
+            _ => None,
+        }
+    }
+
+    async fn next_steps(&self) -> Option<Vec<RegistrationStep>> {
+        match self {
+            Self::Pending { next_steps } => Some(next_steps.clone()),
+            _ => None,
+        }
+    }
+
+    async fn errors(&self) -> Option<Vec<RegistrationFieldError>> {
+        match self {
+            Self::Failed(e) => Some(e.clone()),
+            _ => None,
+        }
+    }
+}
+
+#[derive(InputObject)]
+struct ResendRegistrationEmailInput {
+    session_id: ID,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum ResendRegistrationEmailStatus {
+    Sent,
+    Failed,
+}
+
+#[derive(SimpleObject)]
+struct ResendRegistrationEmailPayload {
+    status: ResendRegistrationEmailStatus,
 }
 
 fn valid_username_character(c: char) -> bool {
@@ -996,5 +1187,468 @@ impl UserMutations {
         repo.save().await?;
 
         Ok(DeactivateUserPayload::Deactivated(user))
+    }
+
+    /// Initiate a user registration.
+    async fn register_user_initiate(
+        &self,
+        ctx: &Context<'_>,
+        input: RegisterUserInitiateInput,
+    ) -> Result<RegisterUserInitiatePayload, async_graphql::Error> {
+        let state = ctx.state();
+        let clock = state.clock();
+        let mut rng = state.rng();
+        let site_config = state.site_config().clone();
+        let password_manager = state.password_manager();
+        let homeserver = state.homeserver_connection();
+        let requester = ctx.requester();
+
+        // Only allow public (non-authenticated) requesters
+        if !requester.is_unauthenticated() {
+            return Err(async_graphql::Error::new("Already authenticated"));
+        }
+
+        if !site_config.password_registration_enabled {
+            return Err(async_graphql::Error::new(
+                "Password registration is disabled",
+            ));
+        }
+
+        let mut repo = state.repository().await?;
+        let mut errors: Vec<RegistrationFieldError> = Vec::new();
+
+        // Validate username
+        if input.username.is_empty() {
+            errors.push(RegistrationFieldError {
+                field: "username".to_owned(),
+                message: "Username is required".to_owned(),
+            });
+        } else if repo.user().exists(&input.username).await? {
+            errors.push(RegistrationFieldError {
+                field: "username".to_owned(),
+                message: "Username is already taken".to_owned(),
+            });
+        } else if !homeserver
+            .is_localpart_available(&input.username)
+            .await
+            .map_err(|e| async_graphql::Error::new(e.to_string()))?
+        {
+            errors.push(RegistrationFieldError {
+                field: "username".to_owned(),
+                message: "Username is not available".to_owned(),
+            });
+        }
+
+        // Validate password
+        if input.password.is_empty() {
+            errors.push(RegistrationFieldError {
+                field: "password".to_owned(),
+                message: "Password is required".to_owned(),
+            });
+        } else if !password_manager.is_password_complex_enough(&input.password)? {
+            errors.push(RegistrationFieldError {
+                field: "password".to_owned(),
+                message: "Password is too weak".to_owned(),
+            });
+        }
+
+        // Validate email if required
+        let email = if site_config.password_registration_email_required {
+            match input.email {
+                Some(e) if !e.is_empty() => Some(e),
+                _ => {
+                    errors.push(RegistrationFieldError {
+                        field: "email".to_owned(),
+                        message: "Email is required".to_owned(),
+                    });
+                    None
+                }
+            }
+        } else {
+            input.email.filter(|e| !e.is_empty())
+        };
+
+        // Validate registration token if required
+        let registration_token_id = if site_config.registration_token_required {
+            match input.registration_token {
+                Some(token) if !token.is_empty() => {
+                    let token_record = repo
+                        .user_registration_token()
+                        .find_by_token(&token)
+                        .await?;
+                    match token_record {
+                        Some(t) if t.is_valid(clock.now()) => Some(t.id),
+                        _ => {
+                            errors.push(RegistrationFieldError {
+                                field: "registration_token".to_owned(),
+                                message: "Invalid or expired registration token".to_owned(),
+                            });
+                            None
+                        }
+                    }
+                }
+                _ => {
+                    errors.push(RegistrationFieldError {
+                        field: "registration_token".to_owned(),
+                        message: "Registration token is required".to_owned(),
+                    });
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        if !errors.is_empty() {
+            return Ok(RegisterUserInitiatePayload::Failed(errors));
+        }
+
+        // All valid: create registration session
+        let ip_address = requester.ip_address;
+        let user_agent = requester.user_agent.clone();
+        let post_auth_action: Option<mas_router::PostAuthAction> = None;
+        let post_auth_action_value = post_auth_action.map(serde_json::to_value).transpose()?;
+
+        let registration = repo
+            .user_registration()
+            .add(&mut *rng, &*clock, input.username.clone(), ip_address, user_agent, post_auth_action_value)
+            .await?;
+
+        // Set terms URL if present
+        let registration = if let Some(tos_uri) = &site_config.tos_uri {
+            repo.user_registration()
+                .set_terms_url(registration, tos_uri.clone())
+                .await?
+        } else {
+            registration
+        };
+
+        // Attach email if provided
+        let registration = if let Some(email) = email {
+            let user_email_auth = repo
+                .user_email()
+                .add_authentication_for_registration(&mut *rng, &*clock, email, &registration)
+                .await?;
+            repo.queue_job()
+                .schedule_job(
+                    &mut *rng,
+                    &*clock,
+                    SendEmailAuthenticationCodeJob::new(
+                        &user_email_auth,
+                        "en".to_owned(),
+                    ),
+                )
+                .await?;
+            repo.user_registration()
+                .set_email_authentication(registration, &user_email_auth)
+                .await?
+        } else {
+            registration
+        };
+
+        // Hash and store password
+        let password = Zeroizing::new(input.password);
+        let (version, hashed_password) = password_manager
+            .hash(rng, password)
+            .await
+            .map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        let registration = repo
+            .user_registration()
+            .set_password(registration, hashed_password, version)
+            .await?;
+
+        // Link registration token if used
+        let registration = if let Some(token_id) = registration_token_id {
+            let token = repo
+                .user_registration_token()
+                .lookup(token_id)
+                .await?
+                .context("Token not found")
+                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+            repo.user_registration()
+                .set_registration_token(registration, &token)
+                .await?
+        } else {
+            registration
+        };
+
+        // Determine next steps
+        let mut next_steps: Vec<RegistrationStep> = Vec::new();
+        if registration.email_authentication_id.is_some() {
+            next_steps.push(RegistrationStep {
+                step_type: RegistrationStepType::EmailVerification,
+            });
+        }
+
+        // If no pending steps, finish immediately
+        if next_steps.is_empty() {
+            let (user, session) = Self::complete_registration(
+                &mut repo,
+                &*clock,
+                state.rng(),
+                registration,
+                homeserver,
+            )
+            .await?;
+            repo.save().await?;
+            return Ok(RegisterUserInitiatePayload::Complete(user, session));
+        }
+
+        repo.save().await?;
+        Ok(RegisterUserInitiatePayload::Pending {
+            session_id: registration.id.to_string().into(),
+            next_steps,
+        })
+    }
+
+    async fn complete_registration_step(
+        &self,
+        ctx: &Context<'_>,
+        input: CompleteRegistrationStepInput,
+    ) -> Result<CompleteRegistrationStepPayload, async_graphql::Error> {
+        let state = ctx.state();
+        let clock = state.clock();
+        let rng = state.rng();
+        let homeserver = state.homeserver_connection();
+        let mut repo = state.repository().await?;
+
+        let session_id: Ulid = input
+            .session_id
+            .parse()
+            .map_err(|_| async_graphql::Error::new("Invalid session ID"))?;
+
+        let registration = repo
+            .user_registration()
+            .lookup(session_id)
+            .await?
+            .context("Registration session not found")
+            .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+
+        if registration.completed_at.is_some() {
+            return Err(async_graphql::Error::new("Registration already completed"));
+        }
+
+        // Expiration check (1 hour hardcoded to match web handler)
+        if chrono::Utc::now() - registration.created_at > chrono::Duration::hours(1) {
+            return Err(async_graphql::Error::new(
+                "Registration session has expired",
+            ));
+        }
+
+        let mut errors = Vec::new();
+
+        match input.step_type {
+            RegistrationStepType::EmailVerification => {
+                let code = input
+                    .data
+                    .as_ref()
+                    .and_then(|d| d.0.get("code").and_then(|v| v.as_str()))
+                    .unwrap_or("");
+
+                if let Some(email_auth_id) = registration.email_authentication_id {
+                    let email_auth = repo
+                        .user_email()
+                        .lookup_authentication(email_auth_id)
+                        .await?
+                        .context("Email authentication not found")
+                        .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+
+                    if email_auth.completed_at.is_some() {
+                        // Already verified
+                    } else if code.is_empty() {
+                        errors.push(RegistrationFieldError {
+                            field: "code".to_owned(),
+                            message: "Verification code is required".to_owned(),
+                        });
+                    } else {
+                        let code_record = repo
+                            .user_email()
+                            .find_authentication_code(&email_auth, code)
+                            .await?;
+                        match code_record {
+                            Some(c) if c.expires_at > clock.now() => {
+                                let _completed = repo
+                                    .user_email()
+                                    .complete_authentication_with_code(&*clock, email_auth, &c)
+                                    .await?;
+                            }
+                            _ => {
+                                errors.push(RegistrationFieldError {
+                                    field: "code".to_owned(),
+                                    message: "Invalid or expired verification code".to_owned(),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                return Err(async_graphql::Error::new(
+                    "This step type is not yet supported via GraphQL",
+                ));
+            }
+        }
+
+        if !errors.is_empty() {
+            return Ok(CompleteRegistrationStepPayload::Failed(errors));
+        }
+
+        // Re-evaluate pending steps
+        let refreshed = repo
+            .user_registration()
+            .lookup(session_id)
+            .await?
+            .context("Registration session not found")
+            .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+
+        let mut next_steps = Vec::new();
+        if let Some(email_auth_id) = refreshed.email_authentication_id {
+            let email_auth = repo
+                .user_email()
+                .lookup_authentication(email_auth_id)
+                .await?
+                .context("Email auth missing")
+                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+            if email_auth.completed_at.is_none() {
+                next_steps.push(RegistrationStep {
+                    step_type: RegistrationStepType::EmailVerification,
+                });
+            }
+        }
+
+        if next_steps.is_empty() {
+            let (user, session) = Self::complete_registration(
+                &mut repo,
+                &*clock,
+                rng,
+                refreshed,
+                homeserver,
+            )
+            .await?;
+            repo.save().await?;
+            return Ok(CompleteRegistrationStepPayload::Complete(user, session));
+        }
+
+        repo.save().await?;
+        Ok(CompleteRegistrationStepPayload::Pending { next_steps })
+    }
+
+    async fn resend_registration_email(
+        &self,
+        ctx: &Context<'_>,
+        input: ResendRegistrationEmailInput,
+    ) -> Result<ResendRegistrationEmailPayload, async_graphql::Error> {
+        let state = ctx.state();
+        let clock = state.clock();
+        let mut rng = state.rng();
+        let mut repo = state.repository().await?;
+
+        let session_id: Ulid = input
+            .session_id
+            .parse()
+            .map_err(|_| async_graphql::Error::new("Invalid session ID"))?;
+
+        let registration = repo
+            .user_registration()
+            .lookup(session_id)
+            .await?
+            .context("Registration session not found")
+            .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+
+        if let Some(email_auth_id) = registration.email_authentication_id {
+            let email_auth = repo
+                .user_email()
+                .lookup_authentication(email_auth_id)
+                .await?
+                .context("Email authentication not found")
+                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+
+            repo.queue_job()
+                .schedule_job(
+                    &mut *rng,
+                    &*clock,
+                    SendEmailAuthenticationCodeJob::new(&email_auth, "en".to_owned()),
+                )
+                .await?;
+            repo.save().await?;
+            Ok(ResendRegistrationEmailPayload {
+                status: ResendRegistrationEmailStatus::Sent,
+            })
+        } else {
+            Ok(ResendRegistrationEmailPayload {
+                status: ResendRegistrationEmailStatus::Failed,
+            })
+        }
+    }
+}
+
+impl UserMutations {
+    async fn complete_registration(
+        repo: &mut mas_storage::BoxRepository,
+        clock: &dyn mas_data_model::Clock,
+        mut rng: mas_data_model::BoxRng,
+        registration: mas_data_model::UserRegistration,
+        homeserver: &dyn mas_matrix::HomeserverConnection,
+    ) -> Result<(mas_data_model::User, mas_data_model::BrowserSession), async_graphql::Error> {
+        use mas_storage::queue::QueueJobRepositoryExt;
+        use mas_storage::queue::ProvisionUserJob;
+        use mas_storage::user::UserRegistrationTokenRepository;
+
+        // Final availability checks
+        if repo.user().exists(&registration.username).await? {
+            return Err(async_graphql::Error::new("Username is already taken"));
+        }
+        if !homeserver.is_localpart_available(&registration.username).await? {
+            return Err(async_graphql::Error::new("Username is not available"));
+        }
+
+        // Mark registration completed
+        let registration = repo.user_registration().complete(clock, registration).await?;
+
+        // Use token if present
+        if let Some(token_id) = registration.user_registration_token_id {
+            let token = repo
+                .user_registration_token()
+                .lookup(token_id)
+                .await?
+                .context("Token not found")
+                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+            repo.user_registration_token()
+                .use_token(clock, token)
+                .await?;
+        }
+
+        // Create user
+        let user = repo
+            .user()
+            .add(&mut *rng, clock, registration.username.clone())
+            .await?;
+
+        // Create browser session
+        let user_agent = registration.user_agent.clone();
+        let session = repo
+            .browser_session()
+            .add(&mut *rng, clock, &user, user_agent)
+            .await?;
+
+        // Add email if present
+        if let Some(email_auth_id) = registration.email_authentication_id {
+            let email_auth = repo
+                .user_email()
+                .lookup_authentication(email_auth_id)
+                .await?
+                .context("Email auth not found")
+                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+            repo.user_email()
+                .add(&mut *rng, clock, &user, email_auth.email)
+                .await?;
+        }
+
+        // Queue provisioning on homeserver
+        repo.queue_job()
+            .schedule_job(&mut *rng, clock, ProvisionUserJob::new(&user))
+            .await?;
+
+        Ok((user, session))
     }
 }
