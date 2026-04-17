@@ -46,6 +46,12 @@ pub struct SiteConfig {
     /// Whether passwords are enabled and users can register using a password.
     password_registration_enabled: bool,
 
+    /// Whether a registration token is required for password-based registration.
+    registration_token_required: bool,
+
+    /// Whether an email address is required for password-based registration.
+    password_registration_email_required: bool,
+
     /// Whether users can delete their own account.
     account_deactivation_allowed: bool,
 
@@ -102,6 +108,8 @@ impl SiteConfig {
             password_login_enabled: data_model.password_login_enabled,
             password_change_allowed: data_model.password_change_allowed,
             password_registration_enabled: data_model.password_registration_enabled,
+            registration_token_required: data_model.registration_token_required,
+            password_registration_email_required: data_model.password_registration_email_required,
             account_deactivation_allowed: data_model.account_deactivation_allowed,
             minimum_password_complexity: data_model.minimum_password_complexity,
             login_with_email_allowed: data_model.login_with_email_allowed,
