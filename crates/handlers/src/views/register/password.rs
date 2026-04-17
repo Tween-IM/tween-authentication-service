@@ -158,7 +158,7 @@ pub(crate) async fn post(
     let passed_captcha = form
         .captcha
         .verify(
-            &activity_tracker,
+            activity_tracker.ip(),
             &http_client,
             url_builder.public_hostname(),
             site_config.captcha.as_ref(),

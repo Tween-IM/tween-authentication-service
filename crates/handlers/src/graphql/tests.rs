@@ -7,7 +7,7 @@
 use axum::http::Request;
 use hyper::StatusCode;
 use mas_axum_utils::SessionInfoExt;
-use mas_data_model::{AccessToken, Client, TokenType, User};
+use mas_data_model::{AccessToken, Client, SiteConfig, TokenType, User};
 use mas_matrix::{HomeserverConnection, ProvisionRequest};
 use mas_router::SimpleRoute;
 use mas_storage::{
@@ -22,7 +22,7 @@ use oauth2_types::{
 use sqlx::PgPool;
 use zeroize::Zeroizing;
 
-use crate::test_utils::{self, CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup};
+use crate::test_utils::{self, CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, test_site_config};
 
 async fn create_test_client(state: &TestState) -> Client {
     let mut repo = state.repository().await.unwrap();
@@ -1074,6 +1074,578 @@ async fn test_deactivate_user_rejected_wrong_password(pool: PgPool) {
     assert_eq!(
         response.data["deactivateUser"]["status"].as_str(),
         Some("INCORRECT_PASSWORD"),
+        "{:?}",
+        response.data
+    );
+}
+
+/// Test the registerUserInitiate mutation happy path without email.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_happy_path_no_email(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool_with_site_config(
+        pool,
+        SiteConfig {
+            password_registration_email_required: false,
+            ..test_site_config()
+        },
+    )
+    .await
+    .unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    acceptTerms: true
+                }) {
+                    status
+                    user {
+                        id
+                        username
+                    }
+                    browserSession {
+                        id
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("COMPLETE"),
+        "{:?}",
+        response.data
+    );
+    assert_eq!(
+        response.data["registerUserInitiate"]["user"]["username"].as_str(),
+        Some("alice"),
+        "{:?}",
+        response.data
+    );
+    assert!(
+        response.data["registerUserInitiate"]["browserSession"]["id"].is_string(),
+        "{:?}",
+        response.data
+    );
+}
+
+/// Test that registerUserInitiate fails when email is required but missing.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_requires_email(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool(pool).await.unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    acceptTerms: true
+                }) {
+                    status
+                    errors {
+                        field
+                        message
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("FAILED"),
+        "{:?}",
+        response.data
+    );
+    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    assert!(errors.iter().any(|e| e["field"].as_str() == Some("email")));
+}
+
+/// Test that registerUserInitiate fails with invalid email.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_invalid_email(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool(pool).await.unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    email: "not-an-email",
+                    acceptTerms: true
+                }) {
+                    status
+                    errors {
+                        field
+                        message
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("FAILED"),
+        "{:?}",
+        response.data
+    );
+    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    assert!(errors.iter().any(|e| e["field"].as_str() == Some("email")));
+}
+
+/// Test that registerUserInitiate fails with weak password.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_weak_password(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool_with_site_config(
+        pool,
+        SiteConfig {
+            password_registration_email_required: false,
+            ..test_site_config()
+        },
+    )
+    .await
+    .unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "123",
+                    passwordConfirm: "123",
+                    acceptTerms: true
+                }) {
+                    status
+                    errors {
+                        field
+                        message
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("FAILED"),
+        "{:?}",
+        response.data
+    );
+    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    assert!(errors.iter().any(|e| e["field"].as_str() == Some("password")));
+}
+
+/// Test that registerUserInitiate fails when username is taken.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_username_taken(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool_with_site_config(
+        pool,
+        SiteConfig {
+            password_registration_email_required: false,
+            ..test_site_config()
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut rng = state.rng();
+    let mut repo = state.repository().await.unwrap();
+    repo.user()
+        .add(&mut rng, &state.clock, "alice".to_owned())
+        .await
+        .unwrap();
+    repo.save().await.unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    acceptTerms: true
+                }) {
+                    status
+                    errors {
+                        field
+                        message
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("FAILED"),
+        "{:?}",
+        response.data
+    );
+    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    assert!(errors.iter().any(|e| e["field"].as_str() == Some("username")));
+}
+
+/// Test that registerUserInitiate fails when password confirm doesn't match.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_password_mismatch(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool_with_site_config(
+        pool,
+        SiteConfig {
+            password_registration_email_required: false,
+            ..test_site_config()
+        },
+    )
+    .await
+    .unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "mismatch",
+                    acceptTerms: true
+                }) {
+                    status
+                    errors {
+                        field
+                        message
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("FAILED"),
+        "{:?}",
+        response.data
+    );
+    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    assert!(errors.iter().any(|e| e["field"].as_str() == Some("password_confirm")));
+}
+
+/// Test that registerUserInitiate fails when terms are required but not accepted.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_register_user_initiate_terms_required(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool_with_site_config(
+        pool,
+        SiteConfig {
+            password_registration_email_required: false,
+            ..test_site_config()
+        },
+    )
+    .await
+    .unwrap();
+
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple"
+                }) {
+                    status
+                    errors {
+                        field
+                        message
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("FAILED"),
+        "{:?}",
+        response.data
+    );
+    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    assert!(errors.iter().any(|e| e["field"].as_str() == Some("accept_terms")));
+}
+
+/// Test the full email verification registration flow.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_complete_registration_email_verification(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool(pool.clone()).await.unwrap();
+
+    // Step 1: Initiate registration
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    email: "alice@example.com",
+                    acceptTerms: true
+                }) {
+                    status
+                    sessionId
+                    nextSteps {
+                        stepType
+                    }
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["registerUserInitiate"]["status"].as_str(),
+        Some("PENDING"),
+        "{:?}",
+        response.data
+    );
+    let session_id = response.data["registerUserInitiate"]["sessionId"]
+        .as_str()
+        .unwrap();
+    let next_steps = response.data["registerUserInitiate"]["nextSteps"]
+        .as_array()
+        .unwrap();
+    assert_eq!(next_steps.len(), 1);
+    assert_eq!(next_steps[0]["stepType"].as_str(), Some("EMAIL_VERIFICATION"));
+
+    // Step 2: Run queued jobs to generate the verification code
+    state.run_jobs_in_queue().await;
+
+    // Step 3: Look up the verification code from the database
+    let session_ulid = ulid::Ulid::from_string(session_id).unwrap();
+    let session_uuid: sqlx::types::Uuid = session_ulid.into();
+    let code: String = sqlx::query_scalar(
+        r#"
+            SELECT c.code
+            FROM user_email_authentication_codes c
+            JOIN user_email_authentications a
+              ON c.user_email_authentication_id = a.user_email_authentication_id
+            JOIN user_registrations r
+              ON a.user_registration_id = r.user_registration_id
+            WHERE r.user_registration_id = $1
+        "#,
+    )
+    .bind(session_uuid)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+
+    // Step 4: Complete the email verification step
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation CompleteStep($input: CompleteRegistrationStepInput!) {
+                completeRegistrationStep(input: $input) {
+                    status
+                    user {
+                        id
+                        username
+                    }
+                    browserSession {
+                        id
+                    }
+                }
+            }
+        "#,
+        "variables": {
+            "input": {
+                "sessionId": session_id,
+                "stepType": "EMAIL_VERIFICATION",
+                "data": {"code": code}
+            }
+        }
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["completeRegistrationStep"]["status"].as_str(),
+        Some("COMPLETE"),
+        "{:?}",
+        response.data
+    );
+    assert_eq!(
+        response.data["completeRegistrationStep"]["user"]["username"].as_str(),
+        Some("alice"),
+        "{:?}",
+        response.data
+    );
+}
+
+/// Test that completeRegistrationStep fails when the session has expired.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_complete_registration_expired_session(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool(pool).await.unwrap();
+
+    // Initiate registration
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    email: "alice@example.com",
+                    acceptTerms: true
+                }) {
+                    status
+                    sessionId
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    let session_id = response.data["registerUserInitiate"]["sessionId"]
+        .as_str()
+        .unwrap();
+
+    // Advance the clock by 2 hours to expire the session
+    state.clock.advance(chrono::Duration::hours(2));
+
+    // Try to complete the step
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation CompleteStep($input: CompleteRegistrationStepInput!) {
+                completeRegistrationStep(input: $input) {
+                    status
+                }
+            }
+        "#,
+        "variables": {
+            "input": {
+                "sessionId": session_id,
+                "stepType": "EMAIL_VERIFICATION",
+                "data": {"code": "123456"}
+            }
+        }
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(
+        response.errors.iter().any(|e| {
+            e["message"]
+                .as_str()
+                .map(|m| m.contains("expired"))
+                .unwrap_or(false)
+        }),
+        "Expected session expired error, got: {:?}",
+        response.errors
+    );
+}
+
+/// Test the resendRegistrationEmail mutation.
+#[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
+async fn test_resend_registration_email(pool: PgPool) {
+    setup();
+    let state = TestState::from_pool(pool).await.unwrap();
+
+    // Initiate registration
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": r#"
+            mutation {
+                registerUserInitiate(input: {
+                    username: "alice",
+                    password: "correcthorsebatterystaple",
+                    passwordConfirm: "correcthorsebatterystaple",
+                    email: "alice@example.com",
+                    acceptTerms: true
+                }) {
+                    status
+                    sessionId
+                }
+            }
+        "#,
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    let session_id = response.data["registerUserInitiate"]["sessionId"]
+        .as_str()
+        .unwrap();
+
+    // Resend the email
+    let request = Request::post("/graphql").json(serde_json::json!({
+        "query": format!(
+            r#"
+                mutation {{
+                    resendRegistrationEmail(input: {{
+                        sessionId: "{}"
+                    }}) {{
+                        status
+                    }}
+                }}
+            "#,
+            session_id
+        ),
+    }));
+
+    let response = state.request(request).await;
+    response.assert_status(StatusCode::OK);
+    let response: GraphQLResponse = response.json();
+    assert!(response.errors.is_empty(), "{:?}", response.errors);
+    assert_eq!(
+        response.data["resendRegistrationEmail"]["status"].as_str(),
+        Some("SENT"),
         "{:?}",
         response.data
     );

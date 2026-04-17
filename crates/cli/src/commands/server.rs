@@ -231,6 +231,7 @@ impl Options {
             password_manager.clone(),
             url_builder.clone(),
             limiter.clone(),
+            http_client.clone(),
         );
 
         let state = {

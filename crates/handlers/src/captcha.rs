@@ -11,7 +11,6 @@ use mas_http::RequestBuilderExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::BoundActivityTracker;
 
 // https://developers.google.com/recaptcha/docs/verify#api_request
 const RECAPTCHA_VERIFY_URL: &str = "https://www.recaptcha.net/recaptcha/api/siteverify";
@@ -55,6 +54,19 @@ pub struct Form {
     g_recaptcha_response: Option<String>,
     h_captcha_response: Option<String>,
     cf_turnstile_response: Option<String>,
+}
+
+impl Form {
+    /// Create a CAPTCHA form from a single response string.
+    /// The response is set on all provider fields since we don't know which
+    /// provider is configured.
+    pub fn from_response(response: Option<String>) -> Self {
+        Self {
+            g_recaptcha_response: response.clone(),
+            h_captcha_response: response.clone(),
+            cf_turnstile_response: response,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -159,7 +171,7 @@ impl Form {
     )]
     pub async fn verify(
         &self,
-        activity_tracker: &BoundActivityTracker,
+        remoteip: Option<IpAddr>,
         http_client: &reqwest::Client,
         site_hostname: &str,
         config: Option<&CaptchaConfig>,
@@ -174,8 +186,6 @@ impl Form {
 
             return Ok(());
         };
-
-        let remoteip = activity_tracker.ip();
         let secret = &config.secret_key;
 
         let span = tracing::Span::current();

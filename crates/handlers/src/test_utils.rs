@@ -174,7 +174,7 @@ impl TestState {
         let templates = Templates::load(
             workspace_root.join("templates"),
             url_builder.clone(),
-            Some(workspace_root.join("frontend/dist/manifest.json")),
+            None,
             workspace_root.join("translations"),
             site_config.templates_branding(),
             site_config.templates_features(),
@@ -228,6 +228,7 @@ impl TestState {
             password_manager: password_manager.clone(),
             url_builder: url_builder.clone(),
             limiter: limiter.clone(),
+            http_client: http_client.clone(),
         };
         let state: crate::graphql::BoxState = Box::new(graphql_state);
 
@@ -441,6 +442,7 @@ struct TestGraphQLState {
     password_manager: PasswordManager,
     url_builder: UrlBuilder,
     limiter: Limiter,
+    http_client: reqwest::Client,
 }
 
 #[async_trait::async_trait]
@@ -475,6 +477,10 @@ impl graphql::State for TestGraphQLState {
 
     fn limiter(&self) -> &Limiter {
         &self.limiter
+    }
+
+    fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
     }
 
     fn rng(&self) -> BoxRng {

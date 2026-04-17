@@ -76,6 +76,7 @@ struct GraphQLState {
     password_manager: PasswordManager,
     url_builder: UrlBuilder,
     limiter: Limiter,
+    http_client: reqwest::Client,
 }
 
 #[async_trait::async_trait]
@@ -108,6 +109,10 @@ impl state::State for GraphQLState {
         &self.limiter
     }
 
+    fn http_client(&self) -> &reqwest::Client {
+        &self.http_client
+    }
+
     fn clock(&self) -> BoxClock {
         let clock = SystemClock::default();
         Box::new(clock)
@@ -131,6 +136,7 @@ pub fn schema(
     password_manager: PasswordManager,
     url_builder: UrlBuilder,
     limiter: Limiter,
+    http_client: reqwest::Client,
 ) -> Schema {
     let state = GraphQLState {
         repository_factory,
@@ -140,6 +146,7 @@ pub fn schema(
         password_manager,
         url_builder,
         limiter,
+        http_client,
     };
     let state: BoxState = Box::new(state);
 

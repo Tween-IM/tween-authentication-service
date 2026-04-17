@@ -26,6 +26,7 @@ pub trait State {
     fn site_config(&self) -> &SiteConfig;
     fn url_builder(&self) -> &UrlBuilder;
     fn limiter(&self) -> &Limiter;
+    fn http_client(&self) -> &reqwest::Client;
 }
 
 pub type BoxState = Box<dyn State + Send + Sync + 'static>;

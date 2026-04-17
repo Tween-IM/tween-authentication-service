@@ -448,11 +448,24 @@ struct RegisterUserInitiateInput {
     /// Account password.
     password: String,
 
+    /// Password confirmation. Must match `password`.
+    password_confirm: Option<String>,
+
     /// Optional email address. Required if server config says so.
     email: Option<String>,
 
     /// Optional registration token. Required if server config says so.
     registration_token: Option<String>,
+
+    /// Whether the user accepts the terms of service. Required if the server has a ToS.
+    accept_terms: Option<bool>,
+
+    /// The language to use for emails.
+    #[graphql(default = "en")]
+    language: String,
+
+    /// CAPTCHA response. Required if the server has CAPTCHA configured.
+    captcha_response: Option<String>,
 }
 
 /// The status of the `registerUserInitiate` mutation.
@@ -483,10 +496,6 @@ pub enum RegisterUserInitiatePayload {
 #[derive(Enum, Copy, Clone, Eq, PartialEq)]
 pub enum RegistrationStepType {
     EmailVerification,
-    DisplayName,
-    RegistrationToken,
-    Captcha,
-    Terms,
 }
 
 /// A step descriptor.
@@ -628,6 +637,7 @@ pub enum ResendRegistrationEmailStatus {
 #[derive(SimpleObject)]
 struct ResendRegistrationEmailPayload {
     status: ResendRegistrationEmailStatus,
+    errors: Option<Vec<RegistrationFieldError>>,
 }
 
 fn valid_username_character(c: char) -> bool {
@@ -1201,6 +1211,7 @@ impl UserMutations {
         let site_config = state.site_config().clone();
         let password_manager = state.password_manager();
         let homeserver = state.homeserver_connection();
+        let limiter = state.limiter();
         let requester = ctx.requester();
 
         // Only allow public (non-authenticated) requesters
@@ -1252,10 +1263,28 @@ impl UserMutations {
             });
         }
 
+        // Validate password confirmation
+        if let Some(ref confirm) = input.password_confirm {
+            if *confirm != input.password {
+                errors.push(RegistrationFieldError {
+                    field: "password_confirm".to_owned(),
+                    message: "Passwords do not match".to_owned(),
+                });
+            }
+        }
+
         // Validate email if required
         let email = if site_config.password_registration_email_required {
             match input.email {
-                Some(e) if !e.is_empty() => Some(e),
+                Some(ref e) if !e.is_empty() => {
+                    if e.parse::<lettre::Address>().is_err() {
+                        errors.push(RegistrationFieldError {
+                            field: "email".to_owned(),
+                            message: "Email address is invalid".to_owned(),
+                        });
+                    }
+                    Some(e.clone())
+                }
                 _ => {
                     errors.push(RegistrationFieldError {
                         field: "email".to_owned(),
@@ -1265,7 +1294,16 @@ impl UserMutations {
                 }
             }
         } else {
-            input.email.filter(|e| !e.is_empty())
+            match input.email.filter(|e| !e.is_empty()) {
+                Some(ref e) if e.parse::<lettre::Address>().is_err() => {
+                    errors.push(RegistrationFieldError {
+                        field: "email".to_owned(),
+                        message: "Email address is invalid".to_owned(),
+                    });
+                    Some(e.clone())
+                }
+                e => e,
+            }
         };
 
         // Validate registration token if required
@@ -1298,6 +1336,89 @@ impl UserMutations {
         } else {
             None
         };
+
+        // Validate terms acceptance if ToS is configured
+        if site_config.tos_uri.is_some() && input.accept_terms != Some(true) {
+            errors.push(RegistrationFieldError {
+                field: "accept_terms".to_owned(),
+                message: "You must accept the terms of service".to_owned(),
+            });
+        }
+
+        // Validate CAPTCHA if configured
+        if site_config.captcha.is_some() {
+            let captcha_form = crate::captcha::Form::from_response(input.captcha_response.clone());
+            if let Err(e) = captcha_form
+                .verify(
+                    requester.ip_address,
+                    state.http_client(),
+                    state.url_builder().public_hostname(),
+                    site_config.captcha.as_ref(),
+                )
+                .await
+            {
+                tracing::warn!(error = &e as &dyn std::error::Error, "CAPTCHA verification failed");
+                errors.push(RegistrationFieldError {
+                    field: "captcha".to_owned(),
+                    message: "CAPTCHA verification failed".to_owned(),
+                });
+            }
+        }
+
+        // Rate limiting
+        if errors.is_empty() {
+            if let Err(e) = limiter.check_registration(requester.fingerprint()) {
+                tracing::warn!(error = &e as &dyn std::error::Error);
+                errors.push(RegistrationFieldError {
+                    field: "form".to_owned(),
+                    message: "Too many registration attempts".to_owned(),
+                });
+            }
+
+            if let Some(ref email) = email {
+                if let Err(e) = limiter.check_email_authentication_email(requester.fingerprint(), email) {
+                    tracing::warn!(error = &e as &dyn std::error::Error);
+                    errors.push(RegistrationFieldError {
+                        field: "email".to_owned(),
+                        message: "Too many email authentication attempts".to_owned(),
+                    });
+                }
+            }
+        }
+
+        // Policy evaluation
+        if errors.is_empty() {
+            let mut policy = state.policy().await?;
+            let res = policy
+                .evaluate_register(mas_policy::RegisterInput {
+                    registration_method: mas_policy::RegistrationMethod::Password,
+                    username: &input.username,
+                    email: email.as_deref(),
+                    requester: requester.for_policy(),
+                })
+                .await?;
+
+            for violation in res.violations {
+                match violation.field.as_deref() {
+                    Some("email") => errors.push(RegistrationFieldError {
+                        field: "email".to_owned(),
+                        message: violation.msg,
+                    }),
+                    Some("username") => errors.push(RegistrationFieldError {
+                        field: "username".to_owned(),
+                        message: violation.msg,
+                    }),
+                    Some("password") => errors.push(RegistrationFieldError {
+                        field: "password".to_owned(),
+                        message: violation.msg,
+                    }),
+                    _ => errors.push(RegistrationFieldError {
+                        field: "form".to_owned(),
+                        message: violation.msg,
+                    }),
+                }
+            }
+        }
 
         if !errors.is_empty() {
             return Ok(RegisterUserInitiatePayload::Failed(errors));
@@ -1335,7 +1456,7 @@ impl UserMutations {
                     &*clock,
                     SendEmailAuthenticationCodeJob::new(
                         &user_email_auth,
-                        "en".to_owned(),
+                        input.language,
                     ),
                 )
                 .await?;
@@ -1410,6 +1531,7 @@ impl UserMutations {
         let clock = state.clock();
         let rng = state.rng();
         let homeserver = state.homeserver_connection();
+        let limiter = state.limiter();
         let mut repo = state.repository().await?;
 
         let session_id: Ulid = input
@@ -1429,7 +1551,7 @@ impl UserMutations {
         }
 
         // Expiration check (1 hour hardcoded to match web handler)
-        if chrono::Utc::now() - registration.created_at > chrono::Duration::hours(1) {
+        if clock.now() - registration.created_at > chrono::Duration::hours(1) {
             return Err(async_graphql::Error::new(
                 "Registration session has expired",
             ));
@@ -1453,7 +1575,14 @@ impl UserMutations {
                         .context("Email authentication not found")
                         .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
 
-                    if email_auth.completed_at.is_some() {
+                    // Rate limit attempts
+                    if let Err(e) = limiter.check_email_authentication_attempt(&email_auth) {
+                        tracing::warn!(error = &e as &dyn std::error::Error);
+                        errors.push(RegistrationFieldError {
+                            field: "code".to_owned(),
+                            message: "Too many verification attempts".to_owned(),
+                        });
+                    } else if email_auth.completed_at.is_some() {
                         // Already verified
                     } else if code.is_empty() {
                         errors.push(RegistrationFieldError {
@@ -1481,11 +1610,6 @@ impl UserMutations {
                         }
                     }
                 }
-            }
-            _ => {
-                return Err(async_graphql::Error::new(
-                    "This step type is not yet supported via GraphQL",
-                ));
             }
         }
 
@@ -1541,6 +1665,8 @@ impl UserMutations {
         let state = ctx.state();
         let clock = state.clock();
         let mut rng = state.rng();
+        let limiter = state.limiter();
+        let requester = ctx.requester();
         let mut repo = state.repository().await?;
 
         let session_id: Ulid = input
@@ -1563,6 +1689,17 @@ impl UserMutations {
                 .context("Email authentication not found")
                 .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
 
+            if let Err(e) = limiter.check_email_authentication_send_code(requester.fingerprint(), &email_auth) {
+                tracing::warn!(error = &e as &dyn std::error::Error);
+                return Ok(ResendRegistrationEmailPayload {
+                    status: ResendRegistrationEmailStatus::Failed,
+                    errors: Some(vec![RegistrationFieldError {
+                        field: "session".to_owned(),
+                        message: "Rate limited. Please try again later.".to_owned(),
+                    }]),
+                });
+            }
+
             repo.queue_job()
                 .schedule_job(
                     &mut *rng,
@@ -1573,10 +1710,15 @@ impl UserMutations {
             repo.save().await?;
             Ok(ResendRegistrationEmailPayload {
                 status: ResendRegistrationEmailStatus::Sent,
+                errors: None,
             })
         } else {
             Ok(ResendRegistrationEmailPayload {
                 status: ResendRegistrationEmailStatus::Failed,
+                errors: Some(vec![RegistrationFieldError {
+                    field: "session".to_owned(),
+                    message: "Email verification is not pending for this session.".to_owned(),
+                }]),
             })
         }
     }
@@ -1592,7 +1734,10 @@ impl UserMutations {
     ) -> Result<(mas_data_model::User, mas_data_model::BrowserSession), async_graphql::Error> {
         use mas_storage::queue::QueueJobRepositoryExt;
         use mas_storage::queue::ProvisionUserJob;
-        use mas_storage::user::UserRegistrationTokenRepository;
+        use mas_storage::user::{
+            BrowserSessionRepository, UserEmailFilter, UserPasswordRepository,
+            UserRegistrationTokenRepository, UserTermsRepository,
+        };
 
         // Final availability checks
         if repo.user().exists(&registration.username).await? {
@@ -1601,6 +1746,27 @@ impl UserMutations {
         if !homeserver.is_localpart_available(&registration.username).await? {
             return Err(async_graphql::Error::new("Username is not available"));
         }
+
+        // Check email isn't already in use before we create the user
+        let email_to_add = if let Some(email_auth_id) = registration.email_authentication_id {
+            let email_auth = repo
+                .user_email()
+                .lookup_authentication(email_auth_id)
+                .await?
+                .context("Email auth not found")
+                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+            if repo
+                .user_email()
+                .count(UserEmailFilter::new().for_email(&email_auth.email))
+                .await?
+                > 0
+            {
+                return Err(async_graphql::Error::new("Email address already in use"));
+            }
+            Some(email_auth.email)
+        } else {
+            None
+        };
 
         // Mark registration completed
         let registration = repo.user_registration().complete(clock, registration).await?;
@@ -1631,22 +1797,45 @@ impl UserMutations {
             .add(&mut *rng, clock, &user, user_agent)
             .await?;
 
+        // Store password and authenticate the session
+        if let Some(password) = registration.password {
+            let user_password = repo
+                .user_password()
+                .add(
+                    &mut *rng,
+                    clock,
+                    &user,
+                    password.version,
+                    password.hashed_password,
+                    None,
+                )
+                .await?;
+            repo.browser_session()
+                .authenticate_with_password(&mut *rng, clock, &session, &user_password)
+                .await?;
+        }
+
         // Add email if present
-        if let Some(email_auth_id) = registration.email_authentication_id {
-            let email_auth = repo
-                .user_email()
-                .lookup_authentication(email_auth_id)
-                .await?
-                .context("Email auth not found")
-                .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
+        if let Some(email) = email_to_add {
             repo.user_email()
-                .add(&mut *rng, clock, &user, email_auth.email)
+                .add(&mut *rng, clock, &user, email)
+                .await?;
+        }
+
+        // Persist terms acceptance
+        if let Some(terms_url) = registration.terms_url {
+            repo.user_terms()
+                .accept_terms(&mut *rng, clock, &user, terms_url)
                 .await?;
         }
 
         // Queue provisioning on homeserver
+        let mut job = ProvisionUserJob::new(&user);
+        if let Some(display_name) = registration.display_name {
+            job = job.set_display_name(display_name);
+        }
         repo.queue_job()
-            .schedule_job(&mut *rng, clock, ProvisionUserJob::new(&user))
+            .schedule_job(&mut *rng, clock, job)
             .await?;
 
         Ok((user, session))
