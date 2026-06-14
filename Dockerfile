@@ -76,35 +76,23 @@ RUN --network=default \
   cargo install --locked \
   cargo-auditable@=${CARGO_AUDITABLE_VERSION}
 
-# Install all cross-compilation targets
+# Install x86_64 target only (skip aarch64 to halve build memory)
 # Network access: to download the targets
 RUN --network=default \
   rustup target add  \
   --toolchain "${RUSTC_VERSION}" \
-  x86_64-unknown-linux-gnu \
-  aarch64-unknown-linux-gnu
-
-RUN --network=none \
-  dpkg --add-architecture arm64 && \
-  dpkg --add-architecture amd64
+  x86_64-unknown-linux-gnu
 
 ARG BUILDPLATFORM
 
-# Install cross-compilation toolchains for all supported targets
+# Install build dependencies (x86_64 only, no cross-compilation)
 # Network access: to install apt packages
 RUN --network=default \
   apt-get update && apt-get install -y \
-  $(if [ "${BUILDPLATFORM}" != "linux/arm64" ]; then echo "g++-aarch64-linux-gnu"; fi) \
-  $(if [ "${BUILDPLATFORM}" != "linux/amd64" ]; then echo "g++-x86-64-linux-gnu"; fi) \
-  libc6-dev-amd64-cross \
-  libc6-dev-arm64-cross \
   g++
 
-# Setup the cross-compilation environment
+# Setup the build environment
 ENV \
-  CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
-  CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
-  CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++ \
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=x86_64-linux-gnu-gcc \
   CC_x86_64_unknown_linux_gnu=x86_64-linux-gnu-gcc \
   CXX_x86_64_unknown_linux_gnu=x86_64-linux-gnu-g++
@@ -130,9 +118,7 @@ RUN --network=default \
     --no-default-features \
     --features docker \
     --target x86_64-unknown-linux-gnu \
-    --target aarch64-unknown-linux-gnu \
-  && mv "target/x86_64-unknown-linux-gnu/release/mas-cli" /usr/local/bin/mas-cli-amd64 \
-  && mv "target/aarch64-unknown-linux-gnu/release/mas-cli" /usr/local/bin/mas-cli-arm64
+  && mv "target/x86_64-unknown-linux-gnu/release/mas-cli" /usr/local/bin/mas-cli-amd64
 
 #######################################
 ## Prepare /usr/local/share/mas-cli/ ##
@@ -150,7 +136,7 @@ COPY ./translations/ /share/translations
 FROM gcr.io/distroless/cc-debian${DEBIAN_VERSION}:debug-nonroot AS debug
 
 ARG TARGETARCH
-COPY --from=builder /usr/local/bin/mas-cli-${TARGETARCH} /usr/local/bin/mas-cli
+COPY --from=builder /usr/local/bin/mas-cli-amd64 /usr/local/bin/mas-cli
 COPY --from=share /share /usr/local/share/mas-cli
 
 WORKDIR /
@@ -162,7 +148,7 @@ ENTRYPOINT ["/usr/local/bin/mas-cli"]
 FROM gcr.io/distroless/cc-debian${DEBIAN_VERSION}:nonroot
 
 ARG TARGETARCH
-COPY --from=builder /usr/local/bin/mas-cli-${TARGETARCH} /usr/local/bin/mas-cli
+COPY --from=builder /usr/local/bin/mas-cli-amd64 /usr/local/bin/mas-cli
 COPY --from=share /share /usr/local/share/mas-cli
 
 WORKDIR /
