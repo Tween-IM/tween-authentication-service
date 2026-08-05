@@ -23,6 +23,7 @@ use mas_router::UrlBuilder;
 use mas_storage::{BoxRepository, BoxRepositoryFactory, RepositoryFactory};
 use mas_storage_pg::PgRepositoryFactory;
 use mas_templates::Templates;
+use mas_tasks::convert::ConvertClient;
 use opentelemetry::KeyValue;
 use rand::SeedableRng;
 use sqlx::PgPool;
@@ -48,6 +49,11 @@ pub struct AppState {
     pub activity_tracker: ActivityTracker,
     pub trusted_proxies: Vec<IpNetwork>,
     pub limiter: Limiter,
+    pub convert: ConvertClient,
+}
+
+impl FromRef<AppState> for ConvertClient {
+    fn from_ref(input: &AppState) -> Self { input.convert.clone() }
 }
 
 impl AppState {

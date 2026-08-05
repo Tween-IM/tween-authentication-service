@@ -152,7 +152,6 @@ pub struct UserEmailAuthenticationCode {
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
 }
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct BrowserSession {
     pub id: Ulid,

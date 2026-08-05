@@ -22,6 +22,7 @@ use tokio_util::{sync::CancellationToken, task::TaskTracker};
 pub use crate::new_queue::QueueWorker;
 
 mod cleanup;
+pub mod convert;
 mod email;
 mod matrix;
 mod new_queue;
@@ -100,6 +101,7 @@ impl State {
     pub fn site_config(&self) -> &SiteConfig {
         &self.site_config
     }
+
 }
 
 /// Initialise the worker, without running it.

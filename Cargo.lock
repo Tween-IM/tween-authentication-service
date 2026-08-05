@@ -3793,9 +3793,11 @@ dependencies = [
  "async-trait",
  "chrono",
  "cron",
+ "mas-config",
  "mas-context",
  "mas-data-model",
  "mas-email",
+ "mas-http",
  "mas-i18n",
  "mas-matrix",
  "mas-router",
@@ -3806,6 +3808,8 @@ dependencies = [
  "opentelemetry-semantic-conventions",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
+ "reqwest",
+ "rustls",
  "serde",
  "serde_json",
  "sqlx",
@@ -3815,6 +3819,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "ulid",
+ "wiremock",
 ]
 
 [[package]]

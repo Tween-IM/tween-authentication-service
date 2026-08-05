@@ -36,11 +36,18 @@ tracing.workspace = true
 ulid.workspace = true
 
 mas-context.workspace = true
+mas-config.workspace = true
 mas-data-model.workspace = true
 mas-email.workspace = true
 mas-i18n.workspace = true
+mas-http.workspace = true
 mas-matrix.workspace = true
 mas-router.workspace = true
 mas-storage-pg.workspace = true
 mas-storage.workspace = true
 mas-templates.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true
+rustls.workspace = true

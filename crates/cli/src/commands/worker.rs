@@ -69,7 +69,6 @@ impl Options {
 
         let http_client = mas_http::reqwest_client();
         let conn = homeserver_connection_from_config(&config.matrix, http_client).await?;
-
         drop(config);
 
         info!("Starting task scheduler");

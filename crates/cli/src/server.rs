@@ -273,7 +273,7 @@ pub fn build_router(
     name: Option<&str>,
 ) -> Router<()> {
     let templates = Templates::from_ref(&state);
-    let mut router = Router::new();
+    let mut router = mas_handlers::identity_router::<AppState>();
 
     for resource in resources {
         router = match resource {

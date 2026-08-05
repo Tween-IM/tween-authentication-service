@@ -59,6 +59,7 @@ impl Options {
         let span = info_span!("cli.run.init").entered();
         let mut shutdown = LifecycleManager::new()?;
         let config = AppConfig::extract(figment).map_err(anyhow::Error::from_boxed)?;
+        let convert_config = config.convert.clone();
 
         info!(version = crate::VERSION, "Starting up");
 
@@ -254,6 +255,7 @@ impl Options {
                 activity_tracker,
                 trusted_proxies,
                 limiter,
+                convert: mas_tasks::convert::ConvertClient::new(&convert_config),
             };
             s.init_metrics();
             s.init_metadata_cache();

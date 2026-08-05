@@ -64,6 +64,7 @@ mod oauth2;
 pub mod passwords;
 pub mod upstream_oauth2;
 mod views;
+mod identity;
 
 mod activity_tracker;
 mod captcha;
@@ -123,6 +124,19 @@ where
     PgPool: FromRef<S>,
 {
     Router::new().route(mas_router::Healthcheck::route(), get(self::health::get))
+}
+
+pub fn identity_router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    PgPool: FromRef<S>,
+    mas_tasks::convert::ConvertClient: FromRef<S>,
+{
+    Router::new()
+        .route("/_matrix/identity/api/v2/validate/msisdn/requestToken", post(identity::request_token))
+        .route("/_matrix/identity/api/v2/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
+        .route("/_matrix/identity/api/v1/validate/msisdn/requestToken", post(identity::request_token))
+        .route("/_matrix/identity/api/v1/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
 }
 
 pub fn graphql_router<S>(playground: bool, undocumented_oauth2_access: bool) -> Router<S>
