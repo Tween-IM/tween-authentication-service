@@ -1,3 +1,4 @@
+// Copyright 2026 Element Creations Ltd.
 // Copyright 2024, 2025 New Vector Ltd.
 // Copyright 2021-2024 The Matrix.org Foundation C.I.C.
 //
@@ -70,6 +71,10 @@ pub struct ClientConfig {
     /// Name of the `OAuth2` client
     #[serde(skip_serializing_if = "Option::is_none")]
     pub client_name: Option<String>,
+
+    /// Client URL for user-facing information about the client
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_uri: Option<Url>,
 
     /// The client secret, used by the `client_secret_basic`,
     /// `client_secret_post` and `client_secret_jwt` authentication methods
@@ -257,6 +262,10 @@ impl ConfigurationSection for ClientsConfig {
 
 #[cfg(test)]
 mod tests {
+    // The closures passed to `Jail::expect_with` return `figment::Error`, which is
+    // large, and we can't change figment's API.
+    #![expect(clippy::result_large_err)]
+
     use std::str::FromStr;
 
     use figment::{
@@ -276,6 +285,8 @@ mod tests {
                     r#"
                       clients:
                         - client_id: 01GFWR28C4KNE04WG3HKXB7C9R
+                          client_name: Testing Triceratops
+                          client_uri: https://testing.example.org
                           client_auth_method: none
                           redirect_uris:
                             - https://exemple.fr/callback
@@ -322,6 +333,14 @@ mod tests {
                 assert_eq!(
                     config.0[0].client_id,
                     Ulid::from_str("01GFWR28C4KNE04WG3HKXB7C9R").unwrap()
+                );
+                assert_eq!(
+                    config.0[0].client_name,
+                    Some("Testing Triceratops".to_string())
+                );
+                assert_eq!(
+                    config.0[0].client_uri,
+                    Some(Url::from_str("https://testing.example.org").unwrap())
                 );
                 assert_eq!(
                     config.0[0].redirect_uris,

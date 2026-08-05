@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 // Please see LICENSE files in the repository root for full details.
 
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
 use mas_iana::oauth::PkceCodeChallengeMethod;
 use oauth2_types::{
@@ -20,7 +22,7 @@ use ulid::Ulid;
 use url::Url;
 
 use super::session::Session;
-use crate::InvalidTransitionError;
+use crate::{BrowserSession, InvalidTransitionError, UlidExt as _};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Pkce {
@@ -60,7 +62,7 @@ pub enum AuthorizationGrantStage {
     #[default]
     Pending,
     Fulfilled {
-        session_id: Ulid,
+        browser_session_id: Ulid,
         fulfilled_at: DateTime<Utc>,
     },
     Exchanged {
@@ -82,26 +84,30 @@ impl AuthorizationGrantStage {
     fn fulfill(
         self,
         fulfilled_at: DateTime<Utc>,
-        session: &Session,
+        browser_session: &BrowserSession,
     ) -> Result<Self, InvalidTransitionError> {
         match self {
             Self::Pending => Ok(Self::Fulfilled {
                 fulfilled_at,
-                session_id: session.id,
+                browser_session_id: browser_session.id,
             }),
             _ => Err(InvalidTransitionError),
         }
     }
 
-    fn exchange(self, exchanged_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
+    fn exchange(
+        self,
+        exchanged_at: DateTime<Utc>,
+        session: &Session,
+    ) -> Result<Self, InvalidTransitionError> {
         match self {
             Self::Fulfilled {
                 fulfilled_at,
-                session_id,
+                browser_session_id: _,
             } => Ok(Self::Exchanged {
                 fulfilled_at,
                 exchanged_at,
-                session_id,
+                session_id: session.id,
             }),
             _ => Err(InvalidTransitionError),
         }
@@ -155,6 +161,9 @@ pub struct AuthorizationGrant {
     pub created_at: DateTime<Utc>,
     pub login_hint: Option<String>,
     pub locale: Option<String>,
+    /// Raw query parameters from the downstream authorization request, used
+    /// to template the parameters forwarded to the upstream provider.
+    pub raw_parameters: BTreeMap<String, String>,
 }
 
 impl std::ops::Deref for AuthorizationGrant {
@@ -173,8 +182,12 @@ impl AuthorizationGrant {
     /// Returns an error if the authorization grant is not [`Fulfilled`].
     ///
     /// [`Fulfilled`]: AuthorizationGrantStage::Fulfilled
-    pub fn exchange(mut self, exchanged_at: DateTime<Utc>) -> Result<Self, InvalidTransitionError> {
-        self.stage = self.stage.exchange(exchanged_at)?;
+    pub fn exchange(
+        mut self,
+        exchanged_at: DateTime<Utc>,
+        session: &Session,
+    ) -> Result<Self, InvalidTransitionError> {
+        self.stage = self.stage.exchange(exchanged_at, session)?;
         Ok(self)
     }
 
@@ -188,9 +201,9 @@ impl AuthorizationGrant {
     pub fn fulfill(
         mut self,
         fulfilled_at: DateTime<Utc>,
-        session: &Session,
+        browser_session: &BrowserSession,
     ) -> Result<Self, InvalidTransitionError> {
-        self.stage = self.stage.fulfill(fulfilled_at, session)?;
+        self.stage = self.stage.fulfill(fulfilled_at, browser_session)?;
         Ok(self)
     }
 
@@ -213,13 +226,13 @@ impl AuthorizationGrant {
     #[doc(hidden)]
     pub fn sample(now: DateTime<Utc>, rng: &mut impl RngCore) -> Self {
         Self {
-            id: Ulid::from_datetime_with_source(now.into(), rng),
+            id: Ulid::from_datetime_with_rng(now, rng),
             stage: AuthorizationGrantStage::Pending,
             code: Some(AuthorizationCode {
                 code: Alphanumeric.sample_string(rng, 10),
                 pkce: None,
             }),
-            client_id: Ulid::from_datetime_with_source(now.into(), rng),
+            client_id: Ulid::from_datetime_with_rng(now, rng),
             redirect_uri: Url::parse("http://localhost:8080").unwrap(),
             scope: Scope::from_iter([OPENID, PROFILE]),
             state: Some(Alphanumeric.sample_string(rng, 10)),
@@ -229,6 +242,7 @@ impl AuthorizationGrant {
             created_at: now,
             login_hint: Some(String::from("mxid:@example-user:example.com")),
             locale: Some(String::from("fr")),
+            raw_parameters: BTreeMap::new(),
         }
     }
 }

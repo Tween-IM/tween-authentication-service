@@ -1,3 +1,4 @@
+// Copyright 2026 Element Creations Ltd.
 // Copyright 2024, 2025 New Vector Ltd.
 // Copyright 2021-2024 The Matrix.org Foundation C.I.C.
 //
@@ -14,7 +15,7 @@ use serde_with::serde_as;
 use super::ConfigurationSection;
 use crate::schema;
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(clippy::unnecessary_wraps)]
 fn default_connection_string() -> Option<String> {
     Some("postgresql://".to_owned())
 }
@@ -27,14 +28,14 @@ fn default_connect_timeout() -> Duration {
     Duration::from_secs(30)
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(clippy::unnecessary_wraps)]
 fn default_idle_timeout() -> Option<Duration> {
-    Some(Duration::from_secs(10 * 60))
+    Some(Duration::from_mins(10))
 }
 
-#[allow(clippy::unnecessary_wraps)]
+#[expect(clippy::unnecessary_wraps)]
 fn default_max_lifetime() -> Option<Duration> {
-    Some(Duration::from_secs(30 * 60))
+    Some(Duration::from_mins(30))
 }
 
 impl Default for DatabaseConfig {
@@ -46,6 +47,7 @@ impl Default for DatabaseConfig {
             socket: None,
             username: None,
             password: None,
+            password_file: None,
             database: None,
             ssl_mode: None,
             ssl_ca: None,
@@ -135,6 +137,15 @@ pub struct DatabaseConfig {
     /// This must not be specified if `uri` is specified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+
+    /// Path to the password to be used if the server demands password
+    /// authentication
+    ///
+    /// This must not be specified if the `password` or `uri` option is
+    /// specified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "Option<String>")]
+    pub password_file: Option<Utf8PathBuf>,
 
     /// The database name
     ///
@@ -241,12 +252,20 @@ impl ConfigurationSection for DatabaseConfig {
             || self.socket.is_some()
             || self.username.is_some()
             || self.password.is_some()
+            || self.password_file.is_some()
             || self.database.is_some();
 
         if self.uri.is_some() && has_split_options {
             return Err(annotate(figment::error::Error::from(
-                "uri must not be specified if host, port, socket, username, password, or database are specified".to_owned(),
+                "uri must not be specified if host, port, socket, username, password, password_file, or database are specified".to_owned(),
             )).into());
+        }
+
+        if self.password.is_some() && self.password_file.is_some() {
+            return Err(annotate(figment::error::Error::from(
+                "password must not be specified if password_file is specified".to_owned(),
+            ))
+            .into());
         }
 
         if self.ssl_ca.is_some() && self.ssl_ca_file.is_some() {
@@ -286,6 +305,10 @@ impl ConfigurationSection for DatabaseConfig {
 }
 #[cfg(test)]
 mod tests {
+    // The closures passed to `Jail::expect_with` return `figment::Error`, which is
+    // large, and we can't change figment's API.
+    #![expect(clippy::result_large_err)]
+
     use figment::{
         Figment, Jail,
         providers::{Format, Yaml},

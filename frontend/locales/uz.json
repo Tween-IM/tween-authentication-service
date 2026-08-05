@@ -25,9 +25,7 @@
     }
   },
   "common": {
-    "add": "Qo‘shish",
     "e2ee": "End-to-end encryption",
-    "error": "Xatolik",
     "loading": "Yuklanmoqda…",
     "next": "Keyingisi",
     "password": "Parol",
@@ -59,7 +57,7 @@
       },
       "password": {
         "change": "Parolni o‘zgartirish",
-        "change_disabled": "Password changes are disabled by the administrator.",
+        "change_disabled": "Parolni o‘zgartirish administrator tomonidan taqiqlangan.",
         "label": "Parol"
       },
       "sign_out": {
@@ -69,34 +67,16 @@
       "title": "Sizning hisobingiz"
     },
     "add_email_form": {
-      "email_denied_alert": {
-        "text": "Kiritilgan elektron pochta manzili server siyosati tomonidan ruxsat etilmagan.",
-        "title": "Elektron pochta siyosat tomonidan rad etildi"
-      },
       "email_denied_error": "The entered email is not allowed by the server policy",
-      "email_exists_alert": {
-        "text": "Kiritilgan elektron pochta manzili ushbu hisobga allaqachon qo‘shilgan.",
-        "title": "Elektron pochta allaqachon mavjud"
-      },
-      "email_exists_error": "Kiritilgan elektron pochta manzili ushbu hisobga allaqachon qo‘shilgan.",
       "email_field_help": "Bu hisobga kirish uchun ishlatishingiz mumkin bo‘lgan muqobil email manzilini kiriting.",
       "email_field_label": "Email manzilini kiritish",
       "email_in_use_error": "The entered email is already in use",
-      "email_invalid_alert": {
-        "text": "Kiritilgan elektron pochta manzili notogʻri",
-        "title": "Xato elektron pochta manzili"
-      },
       "email_invalid_error": "Kiritilgan elektron pochta manzili notogʻri",
       "incorrect_password_error": "Incorrect password, please try again",
       "password_confirmation": "Confirm your account password to add this email address"
     },
-    "app_sessions_list": {
-      "error": "Ilova seanslari yuklanmadi",
-      "heading": "Ilovalar"
-    },
     "browser_session_details": {
-      "current_badge": "Hozirgi",
-      "session_details_title": "Seans"
+      "current_badge": "Hozirgi"
     },
     "browser_sessions_overview": {
       "body:one": "{{count}} ta faol seans",
@@ -110,23 +90,20 @@
     },
     "compat_session_detail": {
       "client_details_title": "Mijoz haqidagi axborot",
-      "name": "Ism",
-      "session_details_title": "Seans"
+      "name": "Ism"
     },
     "device_type_icon_label": {
-      "desktop": "Ish stoli",
       "mobile": "Mobil",
       "pc": "Kompyuter",
       "tablet": "Planshet",
-      "unknown": "Noma’lum qurilma turi",
-      "web": "Veb"
+      "unknown": "Noma’lum qurilma turi"
     },
     "email_in_use": {
       "heading": "The email address {{email}} is already in use."
     },
     "end_session_button": {
       "confirmation_modal_body_text": "Make sure you always have access to another verified device or your recovery key to avoid losing your encrypted chat history.",
-      "confirmation_modal_title": "Haqiqatan ham bu seansni tugatmoqchimisiz?",
+      "confirmation_modal_title": "Haqiqatan ham bu qurilmani olib tashlamoqchimisiz?",
       "text": "Qurilmani olib tashlash"
     },
     "error": {
@@ -135,7 +112,6 @@
       "subtitle": "Kutilmagan xatolik yuz berdi. Qaytadan urinib koʻring.",
       "title": "Nimadir xato ketdi"
     },
-    "error_boundary_title": "Nimadir xato ketdi",
     "errors": {
       "field_required": "Ushbu qator toʻldirilishi shart",
       "rate_limit_exceeded": "You've made too many requests in a short period. Please wait a few minutes and try again."
@@ -146,25 +122,21 @@
       "inactive_90_days": "90+ kun davomida faol emas"
     },
     "nav": {
+      "device_limit_error": "Device limit reached",
       "devices": "Qurilmalar",
       "plan": "Plan",
-      "profile": "Profil",
-      "sessions": "Seanslar",
       "settings": "Sozlamalar"
     },
     "not_found_alert_title": "Topilmadi.",
-    "not_logged_in_alert": "Hisobingizga kirmagansiz.",
     "oauth2_client_detail": {
       "details_title": "Mijoz haqidagi axborot",
-      "id": "Mijoz ID raqami",
       "name": "Ism",
       "policy": "Siyosat",
       "terms": "Xizmat shartlari"
     },
     "oauth2_session_detail": {
       "client_details_name": "Ism",
-      "client_title": "Mijoz haqidagi axborot",
-      "session_details_title": "Seans"
+      "client_title": "Mijoz haqidagi axborot"
     },
     "pagination_controls": {
       "total": "Jami: {{totalCount}}"
@@ -175,26 +147,26 @@
         "description": {
           "account_locked": "Your account is locked and can not be recovered at this time. If this is not expected, please contact your server administrator.",
           "expired_recovery_ticket": "The recovery link has expired. Please start the account recovery process again from the start.",
-          "invalid_new_password": "The new password you chose is invalid; it may not meet the configured security policy.",
-          "no_current_password": "You don't have a current password.",
+          "invalid_new_password": "Siz tanlagan yangi parol yaroqsiz; u sozlangan xavfsizlik siyosatiga mos kelmasligi mumkin.",
+          "no_current_password": "Sizda joriy parol yo‘q.",
           "no_such_recovery_ticket": "The recovery link is invalid. If you copied the link from the recovery e-mail, please check the full link was copied.",
-          "password_changes_disabled": "Password changes are disabled.",
+          "password_changes_disabled": "Parolni o‘zgartirish faolsizlantirildi.",
           "recovery_ticket_already_used": "The recovery link has already been used. It cannot be used again.",
-          "unspecified": "This might be a temporary problem, so please try again later. If the problem persists, please contact your server administrator.",
-          "wrong_password": "The password you supplied as your current password is incorrect. Please try again."
+          "unspecified": "Bu vaqtinchalik muammo bo‘lishi mumkin, keyinroq qayta urining. Agar muammo bartaraf etilmasa, server administratoriga murojaat qiling.",
+          "wrong_password": "Joriy parol sifatida kiritgan parolingiz noto‘g‘ri. Iltimos, qayta urinib ko‘ring."
         },
-        "title": "Failed to update password"
+        "title": "Parolni yangilab bo‘lmadi."
       },
       "new_password_again_label": "Enter new password again",
       "new_password_label": "Yangi parol",
-      "passwords_match": "Passwords match!",
-      "passwords_no_match": "Passwords don't match",
-      "subtitle": "Choose a new password for your account.",
+      "passwords_match": "Parollar mos keldi!",
+      "passwords_no_match": "Parollar mos kelmadi",
+      "subtitle": "Hisobingiz uchun yangi parol tanlang.",
       "success": {
-        "description": "Your password has been updated successfully.",
-        "title": "Password updated"
+        "description": "Parolingiz muvaffaqiyatli yangilandi.",
+        "title": "Parol yangilandi"
       },
-      "title": "Change your password"
+      "title": "Parolingizni o‘zgartiring"
     },
     "password_reset": {
       "consumed": {
@@ -206,7 +178,7 @@
         "subtitle": "Request a new email that will be sent to: {{email}}",
         "title": "The link to reset your password has expired"
       },
-      "subtitle": "Choose a new password for your account.",
+      "subtitle": "Hisobingiz uchun yangi parol tanlang.",
       "title": "Reset your password"
     },
     "password_strength": {
@@ -255,7 +227,6 @@
       }
     },
     "reset_cross_signing": {
-      "button": "Shaxsni tiklash",
       "cancelled": {
         "description_1": "You can close this window and go back to the app to continue.",
         "description_2": "If don’t have access to any other verified devices and you don’t have your recovery key, then you’ll need to reset your digital identity to continue using the app.",
@@ -263,42 +234,31 @@
       },
       "description": "Agar boshqa tasdiqlangan qurilmalarga kirish imkoningiz boʻlmasa va sizda tiklash kaliti boʻlmasa, ilovadan foydalanishda davom etish uchun raqamli identifikatsiyangizni tiklashingiz kerak boʻladi.",
       "effect_list": {
-        "negative_1": "You will lose your existing message history",
-        "negative_2": "You will need to verify all your existing devices and contacts again",
         "neutral_1": "You will lose any message history that's stored only on the server",
         "neutral_2": "You will need to verify all your existing devices and contacts again",
         "positive_1": "Your account details, contacts, preferences, and chat list will be kept"
       },
       "failure": {
-        "description": "This might be a temporary problem, so please try again later. If the problem persists, please contact your server administrator.",
-        "heading": "Failed to allow digital identity reset",
-        "title": "Kripto identifikatsiyasiga ruxsat berilmadi"
+        "description": "Bu vaqtinchalik muammo bo‘lishi mumkin, keyinroq qayta urining. Agar muammo bartaraf etilmasa, server administratoriga murojaat qiling.",
+        "heading": "Failed to allow digital identity reset"
       },
       "finish_reset": "Finish reset",
       "heading": "Boshqa usulda tasdiqlay olmasangiz, raqamli identifikatoringizni asliga qaytaring",
       "start_reset": "Start reset",
       "success": {
         "description": "Raqamli identifikatorni tiklash keyingi {{minutes}} daqiqa uchun tasdiqlandi. Bu oynani yopib, davom etish uchun ilovaga qaytishingiz mumkin.",
-        "heading": "Digital identity reset successfully. Go back to the app to finish the process.",
-        "title": "Kripto identifikatorini asliga qaytarishga vaqtincha ruxsat berildi"
+        "heading": "Digital identity reset successfully. Go back to the app to finish the process."
       },
       "warning": "Only reset your digital identity if you don't have access to another verified device and you don't have your recovery key."
-    },
-    "selectable_session": {
-      "label": "Sessiyani tanlang"
     },
     "session": {
       "client_id_label": "Mijoz ID raqami",
       "current": "Hozirgi",
-      "current_badge": "Hozirgi",
       "device_id_label": "Qurilma ID",
-      "finished_date": "Tugadi <datetime/>",
       "finished_label": "Tugadi",
       "generic_browser_session": "Browser session",
-      "id_label": "ID",
       "ip_label": "IP-manzil",
       "last_active_label": "Oxirgi faollik",
-      "last_auth_label": "Oxirgi autentifikatsiya",
       "name_for_platform": "{{platform}} uchun {{name}}",
       "scopes_label": "Ko‘lamlar",
       "set_device_name": {
@@ -306,14 +266,11 @@
         "label": "Device name",
         "title": "Edit device name"
       },
-      "signed_in_date": "<datetime/> kirildi",
       "signed_in_label": "Kirish",
       "title": "Qurilma tafsilotlari",
       "unknown_browser": "Noma’lum brauzer",
       "unknown_device": "Noma’lum qurilma.",
-      "uri_label": "Uri",
-      "user_id_label": "Foydalanuvchi ID'si",
-      "username_label": "Foydalanuvchi nomi"
+      "uri_label": "Uri"
     },
     "session_detail": {
       "alert": {
@@ -322,15 +279,7 @@
         "title": "Sessiya topilmadi:{{deviceId}}"
       }
     },
-    "unknown_route": "Nomaʼlum yoʻnalish {{route}}",
-    "unverified_email_alert": {
-      "button": "Koʻrib chiqing va tasdiqlang",
-      "text:one": "Sizda {{count}} ta tasdiqlanmagan email manzili bor.",
-      "text:other": "Sizda {{count}} ta tasdiqlanmagan email manzili bor.",
-      "title": "Tasdiqlanmagan elektron pochta"
-    },
     "user_email": {
-      "cant_delete_primary": "Buni oʻchirish uchun boshqa asosiy elektron pochta manzilini tanlang.",
       "delete_button_confirmation_modal": {
         "action": "Elektron pochtani oʻchirish",
         "body": "Bu email o‘chirib tashlansinmi?",
@@ -338,31 +287,30 @@
         "password_confirmation": "Confirm your account password to delete this email address"
       },
       "delete_button_title": "Elektron pochta manzilini olib tashlash",
-      "email": "Elektron pochta",
-      "make_primary_button": "Asosiy qilish",
-      "not_verified": "Tasdiqlanmagan",
-      "primary_email": "Asosiy elektron pochta",
-      "retry_button": "Kodni qayta yuborish",
-      "unverified": "Tasdiqlanmagan"
-    },
-    "user_email_list": {
-      "heading": "Elektron pochta xabarlari",
-      "no_primary_email_alert": "Asosiy elektron pochta manzili yo‘q"
-    },
-    "user_greeting": {
-      "error": "Foydalanuvchi yuklanmadi"
-    },
-    "user_name": {
-      "display_name_field_label": "Ko'rsatiladigan ism"
+      "email": "Elektron pochta"
     },
     "user_sessions_overview": {
-      "active_sessions:one": "{{count}} ta faol seans",
-      "active_sessions:other": "{{count}} ta faol seans",
+      "approaching_session_limit_warning_description:one": "You've used {{num_sessions}} of {{count}} device slot. Once you reach your limit, you'll need to remove an existing device to add another.",
+      "approaching_session_limit_warning_description:other": "You've used {{num_sessions}} of {{count}} device slots. Once you reach your limit, you'll need to remove an existing device to add another.",
+      "approaching_session_limit_warning_header": "Heads up, you're close to your device limit",
       "heading": "Qayerda tizimga kirgansiz",
+      "hit_session_limit_warning_description:one": "You've used {{num_sessions}} of {{count}} device slot. When you try to sign-in again, you'll need to remove an existing device.",
+      "hit_session_limit_warning_description:other": "You've used {{num_sessions}} of {{count}} device slots. When you try to sign-in again, you'll need to remove an existing device.",
+      "hit_session_limit_warning_header": "You've hit the device limit",
       "no_active_sessions": {
         "default": "You are not signed in to any application.",
         "inactive_90_days": "All your sessions have been active in the last 90 days."
-      }
+      },
+      "num_sessions_filtered_header": {
+        "header:one": "{{count}} device matches your filter ({{unfiltered_session_total}})",
+        "header:other": "{{count}} devices match your filter ({{unfiltered_session_total}})",
+        "unfiltered_session_total:one": "{{count}} total",
+        "unfiltered_session_total:other": "{{count}} total"
+      },
+      "num_sessions_header:one": "{{count}} device",
+      "num_sessions_header:other": "{{count}} devices",
+      "session_limit_info:one": "You've used {{count}}/{{limit}} device slots",
+      "session_limit_info:other": "You've used {{count}}/{{limit}} device slots"
     },
     "verify_email": {
       "code_expired_alert": {
@@ -382,10 +330,7 @@
         "description": "Davom etish uchun elektron pochtangizga yuborilgan kodni tekshiring va quyidagi maydonlarni yangilang.",
         "title": "Kodni xato kiritdingiz"
       },
-      "resend_code": "Kodni qayta yuborish",
-      "resend_email": "Elektron pochtani qayta yuborish",
-      "sent": "Yuborildi!",
-      "unknown_email": "Noma’lum email"
+      "resend_code": "Kodni qayta yuborish"
     }
   },
   "mas": {

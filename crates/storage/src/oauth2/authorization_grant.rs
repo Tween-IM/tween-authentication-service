@@ -5,8 +5,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial
 // Please see LICENSE files in the repository root for full details.
 
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
-use mas_data_model::{AuthorizationCode, AuthorizationGrant, Client, Clock, Session};
+use mas_data_model::{
+    AuthorizationCode, AuthorizationGrant, BrowserSession, Client, Clock, Session,
+};
 use oauth2_types::{requests::ResponseMode, scope::Scope};
 use rand_core::RngCore;
 use ulid::Ulid;
@@ -42,11 +46,14 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
     /// * `login_hint`: The `login_hint` the client sent, if set
     /// * `locale`: The locale the detected when the user asked for the
     ///   authorization grant
+    /// * `raw_parameters`: The raw query parameters of the authorization
+    ///   request, used to template the parameters forwarded to the upstream
+    ///   provider
     ///
     /// # Errors
     ///
     /// Returns [`Self::Error`] if the underlying repository fails
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments)]
     async fn add(
         &mut self,
         rng: &mut (dyn RngCore + Send),
@@ -61,6 +68,7 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
         response_type_id_token: bool,
         login_hint: Option<String>,
         locale: Option<String>,
+        raw_parameters: BTreeMap<String, String>,
     ) -> Result<AuthorizationGrant, Self::Error>;
 
     /// Lookup an authorization grant by its ID
@@ -90,15 +98,15 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
     async fn find_by_code(&mut self, code: &str)
     -> Result<Option<AuthorizationGrant>, Self::Error>;
 
-    /// Fulfill an authorization grant, by giving the [`Session`] that it
-    /// created
+    /// Fulfill an authorization grant, by giving the [`BrowserSession`] that
+    /// approved it
     ///
     /// Returns the updated authorization grant
     ///
     /// # Parameters
     ///
     /// * `clock`: The clock used to generate timestamps
-    /// * `session`: The session that was created using this authorization grant
+    /// * `browser_session`: The browser session that approved this grant
     /// * `authorization_grant`: The authorization grant to fulfill
     ///
     /// # Errors
@@ -107,7 +115,7 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
     async fn fulfill(
         &mut self,
         clock: &dyn Clock,
-        session: &Session,
+        browser_session: &BrowserSession,
         authorization_grant: AuthorizationGrant,
     ) -> Result<AuthorizationGrant, Self::Error>;
 
@@ -119,6 +127,7 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
     ///
     /// * `clock`: The clock used to generate timestamps
     /// * `authorization_grant`: The authorization grant to mark as exchanged
+    /// * `session`: The `OAuth2` session created for this grant
     ///
     /// # Errors
     ///
@@ -127,6 +136,7 @@ pub trait OAuth2AuthorizationGrantRepository: Send + Sync {
         &mut self,
         clock: &dyn Clock,
         authorization_grant: AuthorizationGrant,
+        session: &Session,
     ) -> Result<AuthorizationGrant, Self::Error>;
 
     /// Cleanup old authorization grants
@@ -169,6 +179,7 @@ repository_impl!(OAuth2AuthorizationGrantRepository:
         response_type_id_token: bool,
         login_hint: Option<String>,
         locale: Option<String>,
+        raw_parameters: BTreeMap<String, String>,
     ) -> Result<AuthorizationGrant, Self::Error>;
 
     async fn lookup(&mut self, id: Ulid) -> Result<Option<AuthorizationGrant>, Self::Error>;
@@ -179,7 +190,7 @@ repository_impl!(OAuth2AuthorizationGrantRepository:
     async fn fulfill(
         &mut self,
         clock: &dyn Clock,
-        session: &Session,
+        browser_session: &BrowserSession,
         authorization_grant: AuthorizationGrant,
     ) -> Result<AuthorizationGrant, Self::Error>;
 
@@ -187,6 +198,7 @@ repository_impl!(OAuth2AuthorizationGrantRepository:
         &mut self,
         clock: &dyn Clock,
         authorization_grant: AuthorizationGrant,
+        session: &Session,
     ) -> Result<AuthorizationGrant, Self::Error>;
 
     async fn cleanup(

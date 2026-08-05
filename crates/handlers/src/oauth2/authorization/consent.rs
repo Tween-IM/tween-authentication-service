@@ -1,3 +1,4 @@
+// Copyright 2025, 2026 Element Creations Ltd.
 // Copyright 2024, 2025 New Vector Ltd.
 // Copyright 2022-2024 The Matrix.org Foundation C.I.C.
 //
@@ -99,7 +100,13 @@ pub(crate) async fn get(
     Path(grant_id): Path<Ulid>,
 ) -> Result<Response, RouteError> {
     let (cookie_jar, maybe_session) = match load_session_or_fallback(
-        cookie_jar, &clock, &mut rng, &templates, &locale, &mut repo,
+        cookie_jar,
+        &clock,
+        &mut rng,
+        &templates,
+        &locale,
+        Some(PostAuthAction::continue_grant(grant_id)),
+        &mut repo,
     )
     .await?
     {
@@ -159,7 +166,7 @@ pub(crate) async fn get(
         })
         .await?;
     if !res.valid() {
-        let ctx = PolicyViolationContext::for_authorization_grant(grant, client)
+        let ctx = PolicyViolationContext::for_authorization_grant(grant, client, res.violations)
             .with_session(session)
             .with_csrf(csrf_token.form_value())
             .with_language(locale);
@@ -232,7 +239,13 @@ pub(crate) async fn post(
     cookie_jar.verify_form(&clock, form)?;
 
     let (cookie_jar, maybe_session) = match load_session_or_fallback(
-        cookie_jar, &clock, &mut rng, &templates, &locale, &mut repo,
+        cookie_jar,
+        &clock,
+        &mut rng,
+        &templates,
+        &locale,
+        Some(PostAuthAction::continue_grant(grant_id)),
+        &mut repo,
     )
     .await?
     {
@@ -292,7 +305,7 @@ pub(crate) async fn post(
         .await?;
 
     if !res.valid() {
-        let ctx = PolicyViolationContext::for_authorization_grant(grant, client)
+        let ctx = PolicyViolationContext::for_authorization_grant(grant, client, res.violations)
             .with_session(browser_session)
             .with_csrf(csrf_token.form_value())
             .with_language(locale);
@@ -302,21 +315,11 @@ pub(crate) async fn post(
         return Ok((cookie_jar, Html(content)).into_response());
     }
 
-    // All good, let's start the session
-    let session = repo
-        .oauth2_session()
-        .add_from_browser_session(
-            &mut rng,
-            &clock,
-            &client,
-            &browser_session,
-            grant.scope.clone(),
-        )
-        .await?;
-
+    // All good, let's fulfill the grant with the browser session.
+    // The OAuth2 session will be created later at token exchange time.
     let grant = repo
         .oauth2_authorization_grant()
-        .fulfill(&clock, &session, grant)
+        .fulfill(&clock, &browser_session, grant)
         .await?;
 
     let mut params = AuthorizationResponse::default();
@@ -348,10 +351,6 @@ pub(crate) async fn post(
     }
 
     repo.save().await?;
-
-    activity_tracker
-        .record_oauth2_session(&clock, &session)
-        .await;
 
     Ok((
         cookie_jar,

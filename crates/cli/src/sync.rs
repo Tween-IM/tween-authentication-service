@@ -334,13 +334,35 @@ pub async fn config_sync(
                         fetch_userinfo: provider.fetch_userinfo,
                         userinfo_signed_response_alg: provider.userinfo_signed_response_alg,
                         response_mode,
-                        additional_authorization_parameters: provider
-                            .additional_authorization_parameters
-                            .into_iter()
-                            .collect(),
+                        additional_authorization_parameters: {
+                            let mut params: Vec<(String, String)> = provider
+                                .additional_authorization_parameters
+                                .into_iter()
+                                .collect();
+                            // Back-compat: translate `forward_login_hint: true`
+                            // into an `additional_authorization_parameters`
+                            // template entry, unless the operator already set
+                            // one explicitly.
+                            if provider.forward_login_hint
+                                && !params.iter().any(|(k, _)| k == "login_hint")
+                            {
+                                warn!(
+                                    upstream_oauth_provider.id = %provider.id,
+                                    "`forward_login_hint` is deprecated; \
+                                     prefer setting `login_hint: \"{{{{ params.login_hint }}}}\"` \
+                                     in `additional_authorization_parameters`",
+                                );
+                                params.push((
+                                    "login_hint".to_owned(),
+                                    "{{ params.login_hint }}".to_owned(),
+                                ));
+                            }
+                            params
+                        },
                         forward_login_hint: provider.forward_login_hint,
                         ui_order,
                         on_backchannel_logout,
+                        registration_token_required: provider.registration_token_required,
                     },
                 )
                 .await?;
@@ -394,6 +416,7 @@ pub async fn config_sync(
 
             let client_secret = client.client_secret().await?;
             let client_name = client.client_name.as_ref();
+            let client_uri = client.client_uri.as_ref();
             let client_auth_method = client.client_auth_method();
             let jwks = client.jwks.as_ref();
             let jwks_uri = client.jwks_uri.as_ref();
@@ -407,6 +430,7 @@ pub async fn config_sync(
                 .upsert_static(
                     client.client_id,
                     client_name.cloned(),
+                    client_uri.cloned(),
                     client_auth_method,
                     encrypted_client_secret,
                     jwks.cloned(),

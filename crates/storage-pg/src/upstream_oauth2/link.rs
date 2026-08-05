@@ -7,7 +7,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use mas_data_model::{Clock, UpstreamOAuthLink, UpstreamOAuthProvider, User};
+use mas_data_model::{Clock, UlidExt as _, UpstreamOAuthLink, UpstreamOAuthProvider, User};
 use mas_storage::{
     Page, Pagination,
     pagination::Node,
@@ -15,8 +15,10 @@ use mas_storage::{
 };
 use opentelemetry_semantic_conventions::trace::DB_QUERY_TEXT;
 use rand::RngCore;
-use sea_query::{Expr, PostgresQueryBuilder, Query, enum_def};
-use sea_query_binder::SqlxBinder;
+use sea_query::{
+    Expr, ExprTrait, PostgresQueryBuilder, Query, enum_def, extension::postgres::PgExpr as _,
+};
+use sea_query_sqlx::SqlxBinder;
 use sqlx::PgConnection;
 use tracing::Instrument;
 use ulid::Ulid;
@@ -113,6 +115,13 @@ impl Filter for UpstreamOAuthLinkFilter<'_> {
             }))
             .add_option(self.subject().map(|subject| {
                 Expr::col((UpstreamOAuthLinks::Table, UpstreamOAuthLinks::Subject)).eq(subject)
+            }))
+            .add_option(self.human_account_name().map(|human_account_name| {
+                Expr::col((
+                    UpstreamOAuthLinks::Table,
+                    UpstreamOAuthLinks::HumanAccountName,
+                ))
+                .ilike(format!("%{human_account_name}%"))
             }))
     }
 }
@@ -219,7 +228,7 @@ impl UpstreamOAuthLinkRepository for PgUpstreamOAuthLinkRepository<'_> {
         human_account_name: Option<String>,
     ) -> Result<UpstreamOAuthLink, Self::Error> {
         let created_at = clock.now();
-        let id = Ulid::from_datetime_with_source(created_at.into(), rng);
+        let id = Ulid::from_datetime_with_rng(created_at, rng);
         tracing::Span::current().record("upstream_oauth_link.id", tracing::field::display(id));
 
         sqlx::query!(

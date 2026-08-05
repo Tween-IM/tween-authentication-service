@@ -1,3 +1,4 @@
+// Copyright 2025, 2026 Element Creations Ltd.
 // Copyright 2024, 2025 New Vector Ltd.
 // Copyright 2023, 2024 The Matrix.org Foundation C.I.C.
 //
@@ -21,7 +22,7 @@ use mas_axum_utils::{
 use mas_data_model::{BoxClock, BoxRng, MatrixUser};
 use mas_matrix::HomeserverConnection;
 use mas_policy::Policy;
-use mas_router::UrlBuilder;
+use mas_router::{PostAuthAction, UrlBuilder};
 use mas_storage::BoxRepository;
 use mas_templates::{DeviceConsentContext, PolicyViolationContext, TemplateContext, Templates};
 use serde::Deserialize;
@@ -29,7 +30,7 @@ use tracing::warn;
 use ulid::Ulid;
 
 use crate::{
-    BoundActivityTracker, PreferredLanguage,
+    BoundActivityTracker, PreferredLanguage, SiteConfig,
     session::{SessionOrFallback, count_user_sessions_for_limiting, load_session_or_fallback},
 };
 
@@ -43,6 +44,10 @@ enum Action {
 #[derive(Deserialize, Debug)]
 pub(crate) struct ConsentForm {
     action: Action,
+
+    // HTML form checkboxes are only sent when ticked, hence the Option.
+    #[serde(default)]
+    confirm_device: Option<String>,
 }
 
 #[tracing::instrument(name = "handlers.oauth2.device.consent.get", skip_all)]
@@ -53,6 +58,7 @@ pub(crate) async fn get(
     State(templates): State<Templates>,
     State(url_builder): State<UrlBuilder>,
     State(homeserver): State<Arc<dyn HomeserverConnection>>,
+    State(site_config): State<SiteConfig>,
     mut repo: BoxRepository,
     mut policy: Policy,
     activity_tracker: BoundActivityTracker,
@@ -60,8 +66,19 @@ pub(crate) async fn get(
     cookie_jar: CookieJar,
     Path(grant_id): Path<Ulid>,
 ) -> Result<Response, InternalError> {
+    if !site_config.device_code_grant_enabled {
+        return Err(InternalError::from_anyhow(anyhow::anyhow!(
+            "The Device Authorization Grant is disabled"
+        )));
+    }
     let (cookie_jar, maybe_session) = match load_session_or_fallback(
-        cookie_jar, &clock, &mut rng, &templates, &locale, &mut repo,
+        cookie_jar,
+        &clock,
+        &mut rng,
+        &templates,
+        &locale,
+        Some(PostAuthAction::continue_device_code_grant(grant_id)),
+        &mut repo,
     )
     .await?
     {
@@ -130,7 +147,7 @@ pub(crate) async fn get(
         warn!(violation = ?res, "Device code grant for client {} denied by policy", client.id);
 
         let (csrf_token, cookie_jar) = cookie_jar.csrf_token(&clock, &mut rng);
-        let ctx = PolicyViolationContext::for_device_code_grant(grant, client)
+        let ctx = PolicyViolationContext::for_device_code_grant(grant, client, res.violations)
             .with_session(session)
             .with_csrf(csrf_token.form_value())
             .with_language(locale);
@@ -191,6 +208,7 @@ pub(crate) async fn post(
     State(templates): State<Templates>,
     State(url_builder): State<UrlBuilder>,
     State(homeserver): State<Arc<dyn HomeserverConnection>>,
+    State(site_config): State<SiteConfig>,
     mut repo: BoxRepository,
     mut policy: Policy,
     activity_tracker: BoundActivityTracker,
@@ -199,9 +217,20 @@ pub(crate) async fn post(
     Path(grant_id): Path<Ulid>,
     Form(form): Form<ProtectedForm<ConsentForm>>,
 ) -> Result<Response, InternalError> {
+    if !site_config.device_code_grant_enabled {
+        return Err(InternalError::from_anyhow(anyhow::anyhow!(
+            "The Device Authorization Grant is disabled"
+        )));
+    }
     let form = cookie_jar.verify_form(&clock, form)?;
     let (cookie_jar, maybe_session) = match load_session_or_fallback(
-        cookie_jar, &clock, &mut rng, &templates, &locale, &mut repo,
+        cookie_jar,
+        &clock,
+        &mut rng,
+        &templates,
+        &locale,
+        Some(PostAuthAction::continue_device_code_grant(grant_id)),
+        &mut repo,
     )
     .await?
     {
@@ -266,7 +295,7 @@ pub(crate) async fn post(
         warn!(violation = ?res, "Device code grant for client {} denied by policy", client.id);
 
         let (csrf_token, cookie_jar) = cookie_jar.csrf_token(&clock, &mut rng);
-        let ctx = PolicyViolationContext::for_device_code_grant(grant, client)
+        let ctx = PolicyViolationContext::for_device_code_grant(grant, client, res.violations)
             .with_session(session)
             .with_csrf(csrf_token.form_value())
             .with_language(locale);
@@ -279,8 +308,17 @@ pub(crate) async fn post(
     let grant = if grant.is_pending() {
         match form.action {
             Action::Consent => {
+                // The user must explicitly tick the "confirm this is my device" box.
+                // The browser enforces `required` client-side; this is the
+                // server-side safety net.
+                if form.confirm_device.is_none() {
+                    return Err(InternalError::from_anyhow(anyhow::anyhow!(
+                        "The device must be confirmed before consent can be granted"
+                    )));
+                }
+
                 repo.oauth2_device_code_grant()
-                    .fulfill(&clock, grant, &session)
+                    .fulfill(&clock, grant, &session, Some(locale.to_string()))
                     .await?
             }
             Action::Reject => {
