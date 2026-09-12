@@ -7,8 +7,9 @@ const SIGNATURE_HEADER: &str = "x-convert-signature";
 
 /// Delivery state for a Convert event, as stored against a validation session.
 ///
-/// Ordering is Convert's, not ours: `opened`/`clicked` arrive after `delivered`
-/// and must not walk the status backwards.
+/// Convert retries a delivery up to five times, so an earlier event can land
+/// after a later one; the update is guarded by [`status_rank`] rather than
+/// trusting arrival order.
 fn delivery_status(event: &str) -> Option<&'static str> {
     Some(match event {
         "message.sent" => "sent",
@@ -35,6 +36,25 @@ fn find_message_id(value: &Value) -> Option<&str> {
             .or_else(|| map.values().find_map(find_message_id)),
         Value::Array(items) => items.iter().find_map(find_message_id),
         _ => None,
+    }
+}
+
+/// How far along a delivery status is.
+///
+/// `failed`, `bounced` and `unsubscribed` outrank everything: once a message
+/// has terminally failed, a late `opened` (or a retried `sent`) must not make
+/// it look healthy again.
+fn status_rank(status: &str) -> i32 {
+    match status {
+        "accepted" => 0,
+        "sent" => 1,
+        "delivered" => 2,
+        "opened" => 3,
+        "clicked" => 4,
+        "failed" => 5,
+        "bounced" => 6,
+        "unsubscribed" => 7,
+        _ => -1,
     }
 }
 
@@ -77,8 +97,9 @@ pub async fn webhook(
     }
 
     if let (Some(status), Some(message_id)) = (delivery_status(event), message_id) {
-        let _ = sqlx::query("UPDATE matrix_msisdn_validations SET delivery_status=$2, delivery_updated_at=now() WHERE convert_message_id=$1")
-            .bind(message_id).bind(status).execute(&pool).await;
+        // Only ever move forwards.
+        let _ = sqlx::query("UPDATE matrix_msisdn_validations SET delivery_status=$2, delivery_updated_at=now() WHERE convert_message_id=$1 AND coalesce(delivery_status,'') <> 'unsubscribed' AND $3 >= CASE coalesce(delivery_status,'') WHEN 'accepted' THEN 0 WHEN 'sent' THEN 1 WHEN 'delivered' THEN 2 WHEN 'opened' THEN 3 WHEN 'clicked' THEN 4 WHEN 'failed' THEN 5 WHEN 'bounced' THEN 6 ELSE -1 END")
+            .bind(message_id).bind(status).bind(status_rank(status)).execute(&pool).await;
     }
 
     (StatusCode::OK, "ok")
@@ -86,7 +107,7 @@ pub async fn webhook(
 
 #[cfg(test)]
 mod tests {
-    use super::{delivery_status, find_message_id};
+    use super::{delivery_status, find_message_id, status_rank};
     use serde_json::json;
 
     #[test]
@@ -111,5 +132,15 @@ mod tests {
             Some("msg_3")
         );
         assert_eq!(find_message_id(&json!({"data": {"status": "delivered"}})), None);
+    }
+
+    #[test]
+    fn delivery_status_only_moves_forwards() {
+        assert!(status_rank("sent") < status_rank("delivered"));
+        assert!(status_rank("delivered") < status_rank("opened"));
+        // A terminal failure outranks a healthy-looking later event.
+        assert!(status_rank("clicked") < status_rank("failed"));
+        assert!(status_rank("bounced") < status_rank("unsubscribed"));
+        assert!(status_rank("nonsense") < status_rank("accepted"));
     }
 }
