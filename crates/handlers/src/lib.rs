@@ -65,6 +65,7 @@ pub mod passwords;
 pub mod upstream_oauth2;
 mod views;
 mod identity;
+mod convert;
 
 mod activity_tracker;
 mod captcha;
@@ -137,6 +138,17 @@ where
         .route("/_matrix/identity/api/v2/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
         .route("/_matrix/identity/api/v1/validate/msisdn/requestToken", post(identity::request_token))
         .route("/_matrix/identity/api/v1/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
+}
+
+/// Convert delivery webhooks. Mounted unconditionally: the client already
+/// carries the endpoint secret, and the route answers 503 until one is set.
+pub fn convert_router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    PgPool: FromRef<S>,
+    mas_tasks::convert::ConvertClient: FromRef<S>,
+{
+    Router::new().route("/convert/webhook", post(convert::webhook))
 }
 
 pub fn graphql_router<S>(playground: bool, undocumented_oauth2_access: bool) -> Router<S>

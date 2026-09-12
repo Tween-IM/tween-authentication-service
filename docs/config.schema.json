@@ -123,6 +123,14 @@
         }
       ]
     },
+    "convert": {
+      "description": "Configuration for Convert transactional messaging",
+      "allOf": [
+        {
+          "$ref": "#/definitions/ConvertConfig"
+        }
+      ]
+    },
     "secrets": {
       "description": "Application secrets",
       "allOf": [
@@ -1662,6 +1670,67 @@
           "description": "TLS",
           "type": "string",
           "const": "tls"
+        }
+      ]
+    },
+    "ConvertConfig": {
+      "description": "Configuration for Convert transactional messaging.",
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "description": "Convert API base URL.",
+          "type": "string",
+          "default": "https://convert.ruut.chat/api/v1"
+        },
+        "api_key": {
+          "description": "Organisation-scoped Convert API key.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "writeOnly": true
+        },
+        "channel": {
+          "description": "Channel used for phone verification OTPs.",
+          "default": "smart",
+          "allOf": [
+            {
+              "$ref": "#/definitions/ConvertChannel"
+            }
+          ]
+        },
+        "test": {
+          "description": "Validate requests without sending or charging.",
+          "type": "boolean",
+          "default": false
+        },
+        "webhook_secret": {
+          "description": "Secret Convert signs webhook deliveries with (`X-Convert-Signature`).\n\nWithout it the webhook endpoint stays disabled, and delivery state is\nnever recorded — an accepted message would only ever read as accepted.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "writeOnly": true
+        }
+      }
+    },
+    "ConvertChannel": {
+      "description": "Convert delivery channel used for phone verification messages.",
+      "oneOf": [
+        {
+          "description": "Let Convert prefer WhatsApp and fall back to SMS.",
+          "type": "string",
+          "const": "smart"
+        },
+        {
+          "description": "Deliver through WhatsApp.",
+          "type": "string",
+          "const": "whatsapp"
+        },
+        {
+          "description": "Deliver through SMS.",
+          "type": "string",
+          "const": "sms"
         }
       ]
     },

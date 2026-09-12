@@ -32,6 +32,12 @@ pub struct ConvertConfig {
     /// Validate requests without sending or charging.
     #[serde(default)]
     pub test: bool,
+    /// Secret Convert signs webhook deliveries with (`X-Convert-Signature`).
+    ///
+    /// Without it the webhook endpoint stays disabled, and delivery state is
+    /// never recorded — an accepted message would only ever read as accepted.
+    #[serde(default, skip_serializing)]
+    pub webhook_secret: Option<String>,
 }
 
 fn default_base_url() -> String {
@@ -45,6 +51,7 @@ impl Default for ConvertConfig {
             api_key: None,
             channel: ConvertChannel::default(),
             test: false,
+            webhook_secret: None,
         }
     }
 }
@@ -57,12 +64,21 @@ impl ConvertConfig {
             && self.base_url == default_base_url()
             && matches!(self.channel, ConvertChannel::Smart)
             && !self.test
+            && self.webhook_secret.is_none()
     }
 
     /// Whether Convert delivery is configured.
     #[must_use]
     pub fn enabled(&self) -> bool {
         self.api_key.as_deref().is_some_and(|key| !key.trim().is_empty())
+    }
+
+    /// Whether webhook deliveries can be verified.
+    #[must_use]
+    pub fn webhooks_enabled(&self) -> bool {
+        self.webhook_secret
+            .as_deref()
+            .is_some_and(|secret| !secret.trim().is_empty())
     }
 }
 

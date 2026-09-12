@@ -1,8 +1,10 @@
 use std::time::Duration;
 
+use hmac::{Hmac, Mac};
 use mas_config::{ConvertChannel, ConvertConfig};
 use reqwest::{Client, StatusCode, header};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use thiserror::Error;
 use ulid::Ulid;
 
@@ -55,6 +57,7 @@ pub struct ConvertClient {
     api_key: Option<String>,
     channel: ConvertChannel,
     test: bool,
+    webhook_secret: Option<String>,
 }
 
 impl ConvertClient {
@@ -67,7 +70,44 @@ impl ConvertClient {
             api_key: config.api_key.clone(),
             channel: config.channel,
             test: config.test,
+            webhook_secret: config.webhook_secret.clone(),
         }
+    }
+
+    /// Whether webhook deliveries can be verified.
+    #[must_use]
+    pub fn webhooks_enabled(&self) -> bool {
+        self.webhook_secret
+            .as_deref()
+            .is_some_and(|secret| !secret.trim().is_empty())
+    }
+
+    /// Verify a Convert webhook signature against the raw request body.
+    ///
+    /// Convert sends `X-Convert-Signature: sha256=<hex>`, an HMAC of the exact
+    /// bytes posted. Compared in constant time, so a wrong signature cannot be
+    /// discovered byte by byte.
+    #[must_use]
+    pub fn verify_webhook(&self, signature: Option<&str>, body: &[u8]) -> bool {
+        let Some(secret) = self
+            .webhook_secret
+            .as_deref()
+            .filter(|secret| !secret.trim().is_empty())
+        else {
+            return false;
+        };
+        let Some(provided) = signature
+            .and_then(|value| value.trim().strip_prefix("sha256="))
+        else {
+            return false;
+        };
+        let Ok(provided) = hex::decode(provided) else {
+            return false;
+        };
+        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
+            .expect("HMAC accepts keys of any length");
+        mac.update(body);
+        mac.verify_slice(&provided).is_ok()
     }
 
     /// Send a phone verification OTP through the configured Convert channel.
@@ -199,5 +239,36 @@ mod tests {
             .respond_with(ResponseTemplate::new(400).set_body_string("invalid"))
             .expect(1).mount(&server).await;
         assert!(matches!(ConvertClient::new(&config(&server)).send_phone_otp("+1", "123456", "key-3").await, Err(ConvertError::Rejected { status: StatusCode::BAD_REQUEST, .. })));
+    }
+
+    #[test]
+    fn webhook_signatures_are_verified_against_the_raw_body() {
+        let config = ConvertConfig {
+            api_key: Some("rk_test".into()),
+            webhook_secret: Some("whsec_test".into()),
+            ..Default::default()
+        };
+        let client = ConvertClient::new(&config);
+        assert!(client.webhooks_enabled());
+
+        let body = br#"{"event":"message.delivered","data":{"message_id":"msg_1"}}"#;
+        let mut mac = Hmac::<Sha256>::new_from_slice(b"whsec_test").unwrap();
+        mac.update(body);
+        let signature = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
+
+        assert!(client.verify_webhook(Some(&signature), body));
+
+        // Any change to the body, the signature, or its absence is rejected.
+        assert!(!client.verify_webhook(Some(&signature), b"{}"));
+        assert!(!client.verify_webhook(Some("sha256=deadbeef"), body));
+        assert!(!client.verify_webhook(Some("not-a-signature"), body));
+        assert!(!client.verify_webhook(None, body));
+    }
+
+    #[test]
+    fn webhooks_are_disabled_without_a_secret() {
+        let client = ConvertClient::new(&ConvertConfig::default());
+        assert!(!client.webhooks_enabled());
+        assert!(!client.verify_webhook(Some("sha256=00"), b"{}"));
     }
 }
