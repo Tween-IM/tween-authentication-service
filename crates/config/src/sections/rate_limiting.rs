@@ -31,6 +31,10 @@ pub struct RateLimitingConfig {
     /// Email authentication-specific rate limits
     #[serde(default)]
     pub email_authentication: EmailauthenticationRateLimitingConfig,
+
+    /// Phone (msisdn) verification-specific rate limits
+    #[serde(default)]
+    pub phone_verification: PhoneVerificationRateLimitingConfig,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -101,6 +105,27 @@ pub struct EmailauthenticationRateLimitingConfig {
     /// authentication session. This can protect against brute-forcing the
     /// code.
     #[serde(default = "default_email_authentication_attempt_per_session")]
+    pub attempt_per_session: RateLimiterConfiguration,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct PhoneVerificationRateLimitingConfig {
+    /// Controls how many verification messages one source address may request.
+    /// This protects against sending codes to many different numbers.
+    #[serde(default = "default_phone_verification_per_ip")]
+    pub per_ip: RateLimiterConfiguration,
+
+    /// Controls how many verification messages one number may receive.
+    /// This protects a single target from being flooded.
+    ///
+    /// Note: this limit also applies to re-sends. The default matches the
+    /// five-minute lifetime of a code, so a user can always ask for a new one.
+    #[serde(default = "default_phone_verification_per_number")]
+    pub per_number: RateLimiterConfiguration,
+
+    /// Controls how many code submissions are permitted per validation session.
+    /// This protects against brute-forcing the six-digit code.
+    #[serde(default = "default_phone_verification_attempt_per_session")]
     pub attempt_per_session: RateLimiterConfiguration,
 }
 
@@ -264,7 +289,39 @@ impl Default for RateLimitingConfig {
             registration: default_registration(),
             account_recovery: AccountRecoveryRateLimitingConfig::default(),
             email_authentication: EmailauthenticationRateLimitingConfig::default(),
+            phone_verification: PhoneVerificationRateLimitingConfig::default(),
         }
+    }
+}
+
+impl Default for PhoneVerificationRateLimitingConfig {
+    fn default() -> Self {
+        PhoneVerificationRateLimitingConfig {
+            per_ip: default_phone_verification_per_ip(),
+            per_number: default_phone_verification_per_number(),
+            attempt_per_session: default_phone_verification_attempt_per_session(),
+        }
+    }
+}
+
+fn default_phone_verification_per_ip() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(5).unwrap(),
+        per_second: 1.0 / 60.0,
+    }
+}
+
+fn default_phone_verification_per_number() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(3).unwrap(),
+        per_second: 1.0 / 300.0,
+    }
+}
+
+fn default_phone_verification_attempt_per_session() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(10).unwrap(),
+        per_second: 1.0 / 60.0,
     }
 }
 

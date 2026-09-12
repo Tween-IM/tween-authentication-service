@@ -4,6 +4,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use ulid::Ulid;
 
+use crate::rate_limit::{Limiter, RequesterFingerprint};
+
 #[derive(Deserialize)]
 pub struct RequestToken {
     pub client_secret: String,
@@ -20,7 +22,11 @@ pub struct TokenResponse { pub sid: String, pub submit_url: String }
 pub struct SubmitToken { pub sid: String, pub client_secret: String, pub token: String }
 
 pub async fn request_token(
-    State(pool): State<PgPool>, State(convert): State<ConvertClient>, Json(input): Json<RequestToken>,
+    State(pool): State<PgPool>,
+    State(convert): State<ConvertClient>,
+    State(limiter): State<Limiter>,
+    fingerprint: RequesterFingerprint,
+    Json(input): Json<RequestToken>,
 ) -> impl IntoResponse {
     if input.client_secret.is_empty()
         || input.client_secret.len() > 255
@@ -38,8 +44,15 @@ pub async fn request_token(
     let Some(phone) = normalize_phone(&input.country, &input.phone_number) else {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"errcode":"M_INVALID_PARAM","error":"Invalid phone number"})));
     };
+    // Every accepted request sends a real message on our Convert account, so
+    // the limits are checked before anything is stored or sent.
+    if let Err(error) = limiter.check_phone_verification(fingerprint, &phone) {
+        tracing::warn!(%error, "Phone verification rate limited");
+        return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({"errcode":"M_LIMIT_EXCEEDED","error":"Too many verification requests. Please try again later."})));
+    }
+    let next_link = safe_next_link(input.next_link.as_deref());
     let inserted = sqlx::query("INSERT INTO matrix_msisdn_validations (sid, client_secret_hash, phone_number, token_hash, next_link, expires_at) VALUES ($1,$2,$3,$4,$5,now()+interval '5 minutes')")
-        .bind(&sid).bind(secret_hash).bind(&phone).bind(sha256(&code)).bind(input.next_link).execute(&pool).await;
+        .bind(&sid).bind(secret_hash).bind(&phone).bind(sha256(&code)).bind(next_link).execute(&pool).await;
     if inserted.is_err() { return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not create validation session"}))); }
     let receipt = match convert.send_phone_otp(&phone, &code, &format!("matrix-msisdn-{sid}")).await {
         Ok(receipt) => receipt,
@@ -56,13 +69,21 @@ pub async fn request_token(
     (StatusCode::OK, Json(serde_json::json!(TokenResponse { sid, submit_url: "/_matrix/identity/api/v2/validate/msisdn/submitToken".to_owned() })))
 }
 
-pub async fn submit_token(State(pool): State<PgPool>, Json(input): Json<SubmitToken>) -> impl IntoResponse {
+pub async fn submit_token(State(pool): State<PgPool>, State(limiter): State<Limiter>, Json(input): Json<SubmitToken>) -> impl IntoResponse {
+    if let Err(error) = limiter.check_phone_verification_attempt(&input.sid) {
+        tracing::warn!(%error, "Phone verification attempt rate limited");
+        return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({"errcode":"M_LIMIT_EXCEEDED","error":"Too many attempts. Please request a new code."})));
+    }
     let result = sqlx::query("UPDATE matrix_msisdn_validations SET validated_at=now() WHERE sid=$1 AND client_secret_hash=$2 AND token_hash=$3 AND validated_at IS NULL AND expires_at>now()")
         .bind(input.sid).bind(sha256(&input.client_secret)).bind(sha256(&input.token)).execute(&pool).await;
     match result { Ok(r) if r.rows_affected() == 1 => (StatusCode::OK, Json(serde_json::json!({"success":true}))), _ => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"success":false}))) }
 }
 
-pub async fn submit_token_get(State(pool): State<PgPool>, Query(input): Query<SubmitToken>) -> impl IntoResponse {
+pub async fn submit_token_get(State(pool): State<PgPool>, State(limiter): State<Limiter>, Query(input): Query<SubmitToken>) -> impl IntoResponse {
+    if let Err(error) = limiter.check_phone_verification_attempt(&input.sid) {
+        tracing::warn!(%error, "Phone verification attempt rate limited");
+        return (StatusCode::TOO_MANY_REQUESTS, "Too many attempts").into_response();
+    }
     let result = sqlx::query_scalar::<_, Option<String>>("UPDATE matrix_msisdn_validations SET validated_at=now() WHERE sid=$1 AND client_secret_hash=$2 AND token_hash=$3 AND validated_at IS NULL AND expires_at>now() RETURNING next_link")
         .bind(input.sid).bind(sha256(&input.client_secret)).bind(sha256(&input.token)).fetch_optional(&pool).await;
     match result {
@@ -73,6 +94,23 @@ pub async fn submit_token_get(State(pool): State<PgPool>, Query(input): Query<Su
 }
 
 fn sha256(value: &str) -> Vec<u8> { use sha2::{Digest, Sha256}; Sha256::digest(value.as_bytes()).to_vec() }
+
+/// Only same-origin, relative `next_link` values are honoured.
+///
+/// `next_link` is client-supplied, so echoing an absolute URL back as a
+/// redirect turns this endpoint into an open redirect: a phishing hop that
+/// looks like it came from the homeserver. Anything that is not a plain
+/// relative path is dropped, and the caller gets the normal success response
+/// instead of a redirect.
+#[must_use]
+pub fn safe_next_link(next_link: Option<&str>) -> Option<String> {
+    let link = next_link?.trim();
+    if link.starts_with('/') && !link.starts_with("//") && !link.starts_with("/\\") {
+        return Some(link.to_owned());
+    }
+    tracing::warn!(next_link = link, "Ignoring non-relative next_link");
+    None
+}
 
 /// Dial codes for the markets we verify numbers in. Swap for libphonenumber
 /// (`phonenumber` crate) if we ever need the full table.
@@ -135,7 +173,7 @@ pub fn normalize_phone(country: &str, raw: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_phone, sha256};
+    use super::{normalize_phone, safe_next_link, sha256};
 
     #[test]
     fn hashes_are_deterministic_and_not_plaintext() {
@@ -169,5 +207,17 @@ mod tests {
         assert_eq!(normalize_phone("NG", "+1234567890123456"), None);
         // No dial code for this country and no international prefix.
         assert_eq!(normalize_phone("ZZ", "8012345678"), None);
+    }
+
+    #[test]
+    fn only_relative_next_links_survive() {
+        assert_eq!(safe_next_link(Some("/home")).as_deref(), Some("/home"));
+        assert_eq!(safe_next_link(Some("  /settings  ")).as_deref(), Some("/settings"));
+        assert_eq!(safe_next_link(None), None);
+        // Absolute, protocol-relative and backslash tricks are all dropped.
+        assert_eq!(safe_next_link(Some("https://evil.example/phish")), None);
+        assert_eq!(safe_next_link(Some("//evil.example")), None);
+        assert_eq!(safe_next_link(Some("/\\evil.example")), None);
+        assert_eq!(safe_next_link(Some("javascript:alert(1)")), None);
     }
 }

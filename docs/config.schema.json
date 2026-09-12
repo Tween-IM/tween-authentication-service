@@ -2094,6 +2094,28 @@
               "$ref": "#/definitions/EmailauthenticationRateLimitingConfig"
             }
           ]
+        },
+        "phone_verification": {
+          "description": "Phone (msisdn) verification-specific rate limits",
+          "default": {
+            "per_ip": {
+              "burst": 5,
+              "per_second": 0.016666666666666666
+            },
+            "per_number": {
+              "burst": 3,
+              "per_second": 0.0033333333333333335
+            },
+            "attempt_per_session": {
+              "burst": 10,
+              "per_second": 0.016666666666666666
+            }
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/PhoneVerificationRateLimitingConfig"
+            }
+          ]
         }
       }
     },
@@ -2216,6 +2238,47 @@
         },
         "attempt_per_session": {
           "description": "Controls how many code authentication attempts are permitted per\nauthentication session. This can protect against brute-forcing the\ncode.",
+          "default": {
+            "burst": 10,
+            "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        }
+      }
+    },
+    "PhoneVerificationRateLimitingConfig": {
+      "type": "object",
+      "properties": {
+        "per_ip": {
+          "description": "Controls how many verification messages one source address may request.\nThis protects against sending codes to many different numbers.",
+          "default": {
+            "burst": 5,
+            "per_second": 0.016666666666666666
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "per_number": {
+          "description": "Controls how many verification messages one number may receive.\nThis protects a single target from being flooded.\n\nNote: this limit also applies to re-sends. The default matches the\nfive-minute lifetime of a code, so a user can always ask for a new one.",
+          "default": {
+            "burst": 3,
+            "per_second": 0.0033333333333333335
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "attempt_per_session": {
+          "description": "Controls how many code submissions are permitted per validation session.\nThis protects against brute-forcing the six-digit code.",
           "default": {
             "burst": 10,
             "per_second": 0.016666666666666666

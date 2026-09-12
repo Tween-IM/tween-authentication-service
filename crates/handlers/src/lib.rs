@@ -132,6 +132,7 @@ where
     S: Clone + Send + Sync + 'static,
     PgPool: FromRef<S>,
     mas_tasks::convert::ConvertClient: FromRef<S>,
+    Limiter: FromRef<S>,
 {
     Router::new()
         .route("/_matrix/identity/api/v2/validate/msisdn/requestToken", post(identity::request_token))

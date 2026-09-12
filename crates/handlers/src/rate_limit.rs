@@ -51,6 +51,18 @@ pub enum EmailAuthenticationLimitedError {
     Email(String),
 }
 
+#[derive(Debug, Clone, thiserror::Error)]
+pub enum PhoneVerificationLimitedError {
+    #[error("Too many phone verification requests for requester {0}")]
+    Requester(RequesterFingerprint),
+
+    #[error("Too many phone verification requests for number {0}")]
+    Number(String),
+
+    #[error("Too many phone verification attempts for session {0}")]
+    Session(String),
+}
+
 /// Key used to rate limit requests per requester
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct RequesterFingerprint {
@@ -120,6 +132,9 @@ struct LimiterInner {
     email_authentication_per_email: KeyedRateLimiter<String>,
     email_authentication_emails_per_session: KeyedRateLimiter<Ulid>,
     email_authentication_attempt_per_session: KeyedRateLimiter<Ulid>,
+    phone_verification_per_requester: KeyedRateLimiter<RequesterFingerprint>,
+    phone_verification_per_number: KeyedRateLimiter<String>,
+    phone_verification_attempt_per_session: KeyedRateLimiter<String>,
 }
 
 impl LimiterInner {
@@ -145,6 +160,15 @@ impl LimiterInner {
             ),
             email_authentication_attempt_per_session: RateLimiter::keyed(
                 config.email_authentication.attempt_per_session.to_quota()?,
+            ),
+            phone_verification_per_requester: RateLimiter::keyed(
+                config.phone_verification.per_ip.to_quota()?,
+            ),
+            phone_verification_per_number: RateLimiter::keyed(
+                config.phone_verification.per_number.to_quota()?,
+            ),
+            phone_verification_attempt_per_session: RateLimiter::keyed(
+                config.phone_verification.attempt_per_session.to_quota()?,
             ),
         })
     }
@@ -322,6 +346,47 @@ impl Limiter {
             .email_authentication_emails_per_session
             .check_key(&authentication.id)
             .map_err(|_| EmailAuthenticationLimitedError::Authentication(authentication.id))
+    }
+
+    /// Check if a phone verification code can be sent to a number.
+    ///
+    /// Covers both the source address and the target number, so neither a wide
+    /// sweep of numbers nor a flood against one number gets through.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is rate limited.
+    pub fn check_phone_verification(
+        &self,
+        requester: RequesterFingerprint,
+        phone_number: &str,
+    ) -> Result<(), PhoneVerificationLimitedError> {
+        self.inner
+            .phone_verification_per_requester
+            .check_key(&requester)
+            .map_err(|_| PhoneVerificationLimitedError::Requester(requester))?;
+
+        self.inner
+            .phone_verification_per_number
+            .check_key(&phone_number.to_owned())
+            .map_err(|_| PhoneVerificationLimitedError::Number(phone_number.to_owned()))
+    }
+
+    /// Check if a code can be submitted for a phone verification session.
+    ///
+    /// Without this, six digits is only a million guesses away.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is rate limited.
+    pub fn check_phone_verification_attempt(
+        &self,
+        session: &str,
+    ) -> Result<(), PhoneVerificationLimitedError> {
+        self.inner
+            .phone_verification_attempt_per_session
+            .check_key(&session.to_owned())
+            .map_err(|_| PhoneVerificationLimitedError::Session(session.to_owned()))
     }
 }
 
