@@ -1371,7 +1371,9 @@ impl UserMutations {
                 tracing::warn!(error = &e as &dyn std::error::Error);
                 errors.push(RegistrationFieldError {
                     field: "form".to_owned(),
-                    message: "Too many registration attempts".to_owned(),
+                    message:
+                        "Too many registration attempts. Please wait a while before trying again."
+                            .to_owned(),
                 });
             }
 
@@ -1380,7 +1382,9 @@ impl UserMutations {
                     tracing::warn!(error = &e as &dyn std::error::Error);
                     errors.push(RegistrationFieldError {
                         field: "email".to_owned(),
-                        message: "Too many email authentication attempts".to_owned(),
+                        message:
+                            "Too many attempts on this email address. Please wait an hour, or use a different address."
+                                .to_owned(),
                     });
                 }
             }
@@ -1580,7 +1584,8 @@ impl UserMutations {
                         tracing::warn!(error = &e as &dyn std::error::Error);
                         errors.push(RegistrationFieldError {
                             field: "code".to_owned(),
-                            message: "Too many verification attempts".to_owned(),
+                            message: "Too many attempts. Request a new code and try again."
+                                .to_owned(),
                         });
                     } else if email_auth.completed_at.is_some() {
                         // Already verified
