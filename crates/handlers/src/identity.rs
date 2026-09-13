@@ -221,3 +221,58 @@ mod tests {
         assert_eq!(safe_next_link(Some("javascript:alert(1)")), None);
     }
 }
+
+/// Attach a proved number to the account that proved it.
+///
+/// The code is verified before the account exists, so the number is claimed
+/// after: the validation row is the proof, and this consumes it. One statement
+/// so that two claims of the same number cannot both succeed — the unique
+/// constraint on `user_phones` decides.
+#[derive(Debug, Deserialize)]
+pub struct Claim {
+    sid: String,
+    client_secret: String,
+    user_id: String,
+}
+
+/// Claim the number validated in `sid` for `user_id`
+pub async fn claim(State(pool): State<PgPool>, Json(input): Json<Claim>) -> impl IntoResponse {
+    let claimed = sqlx::query_scalar::<_, String>(
+        "INSERT INTO user_phones (user_phone_id, user_id, phone_number, created_at)
+         SELECT gen_random_uuid(), $1::uuid, phone_number, now()
+           FROM matrix_msisdn_validations
+          WHERE sid = $2 AND client_secret_hash = $3
+            AND validated_at IS NOT NULL AND expires_at > now()
+         ON CONFLICT (phone_number) DO NOTHING
+         RETURNING phone_number",
+    )
+    .bind(&input.user_id)
+    .bind(&input.sid)
+    .bind(sha256(&input.client_secret))
+    .fetch_optional(&pool)
+    .await;
+
+    match claimed {
+        Ok(Some(phone_number)) => (
+            StatusCode::OK,
+            Json(serde_json::json!({"success": true, "phone_number": phone_number})),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "The number was not verified, or another account already has it",
+            })),
+        )
+            .into_response(),
+        Err(error) => {
+            tracing::error!(error = &error as &dyn std::error::Error, "claiming a phone number failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({"success": false, "error": "Internal error"})),
+            )
+                .into_response()
+        }
+    }
+}

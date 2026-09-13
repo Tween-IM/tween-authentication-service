@@ -137,6 +137,7 @@ where
     Router::new()
         .route("/_matrix/identity/api/v2/validate/msisdn/requestToken", post(identity::request_token))
         .route("/_matrix/identity/api/v2/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
+        .route("/_matrix/identity/api/v2/validate/msisdn/claim", post(identity::claim))
         .route("/_matrix/identity/api/v1/validate/msisdn/requestToken", post(identity::request_token))
         .route("/_matrix/identity/api/v1/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
 }
