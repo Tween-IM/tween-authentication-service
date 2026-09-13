@@ -239,10 +239,13 @@ async fn resolve_login_identifier(
             repo.user().lookup(email.user_id).await?
         }
         TypedLogin::Phone(number) => {
-            // The number is not stored on the account yet, so there is nothing
-            // to look it up with. Logged so the intent survives the gap.
-            tracing::debug!(phone = %number, "phone sign-in is not supported yet");
-            None
+            // The number the identity endpoints normalised to E.164, looked up
+            // in the table that now holds a number once a user claims it.
+            let phone = repo.user_phone().find_by_phone_number(number).await?;
+            match phone {
+                Some(phone) => repo.user().lookup(phone.user_id).await?,
+                None => None,
+            }
         }
         TypedLogin::Unsupported => None,
     };
