@@ -175,8 +175,85 @@ pub enum Identifier {
     #[serde(rename = "m.id.user")]
     User { user: String },
 
+    /// How Element — and our own clients — send an address that they have
+    /// already classified: an email address or a phone number.
+    #[serde(rename = "m.id.thirdparty")]
+    ThirdParty { medium: String, address: String },
+
+    /// The structured phone identifier from the spec.
+    #[serde(rename = "m.id.phone")]
+    Phone { country: String, phone: String },
+
     #[serde(other)]
     Unsupported,
+}
+
+/// What someone typed into the one sign-in field.
+///
+/// People do not know whether their account is a username, an email address or
+/// a phone number, and they should not have to: the service works it out.
+enum TypedLogin {
+    Username(String),
+    Email(String),
+    Phone(String),
+    Unsupported,
+}
+
+impl From<Identifier> for TypedLogin {
+    fn from(identifier: Identifier) -> Self {
+        match identifier {
+            Identifier::User { user } => Self::Username(user),
+            Identifier::ThirdParty { medium, address } => match medium.as_str() {
+                "email" => Self::Email(address),
+                "msisdn" => Self::Phone(address),
+                _ => Self::Unsupported,
+            },
+            Identifier::Phone { phone, .. } => Self::Phone(phone),
+            Identifier::Unsupported => Self::Unsupported,
+        }
+    }
+}
+
+/// Finds the account behind a username, an email address or a phone number.
+///
+/// Emails live on the user and are only there once confirmed. Phone numbers are
+/// not stored by this service yet, so a number currently ends the same way an
+/// unknown username does.
+async fn resolve_login_identifier(
+    repo: &mut BoxRepository,
+    homeserver: &dyn HomeserverConnection,
+    typed: TypedLogin,
+) -> Result<User, RouteError> {
+    let user = match &typed {
+        TypedLogin::Username(value) => {
+            // A full MXID is accepted here too, as it always was.
+            let localpart = homeserver.localpart(value).unwrap_or(value);
+            repo.user().find_by_username(localpart).await?
+        }
+        TypedLogin::Email(address) => {
+            let email = repo
+                .user_email()
+                .find_by_email(address)
+                .await?
+                .ok_or(RouteError::UserNotFound)?;
+            repo.user().lookup(email.user_id).await?
+        }
+        TypedLogin::Phone(number) => {
+            // The number is not stored on the account yet, so there is nothing
+            // to look it up with. Logged so the intent survives the gap.
+            tracing::debug!(phone = %number, "phone sign-in is not supported yet");
+            None
+        }
+        TypedLogin::Unsupported => None,
+    };
+
+    user.filter(|user| user.deactivated_at.is_none())
+        .ok_or_else(|| match typed {
+            // An identifier type we do not know at all is a different answer
+            // from one we know but cannot find.
+            TypedLogin::Unsupported => RouteError::UnsupportedIdentifier,
+            _ => RouteError::UserNotFound,
+        })
 }
 
 #[skip_serializing_none]
@@ -342,18 +419,15 @@ pub(crate) async fn post(
             // This is to support both the (very) old and deprecated 'user' property, with
             // the same behavior as Synapse: it takes precendence over the 'identifier' if
             // provided
-            let user = match (identifier, user) {
-                (Some(Identifier::User { user }), None) | (_, Some(user)) => user,
-                (Some(Identifier::Unsupported), None) => {
-                    return Err(RouteError::UnsupportedIdentifier);
-                }
-                (None, None) => {
-                    return Err(RouteError::MissingIdentifier);
-                }
+            let typed = match (identifier, user) {
+                (_, Some(user)) => TypedLogin::Username(user),
+                (Some(identifier), None) => TypedLogin::from(identifier),
+                (None, None) => return Err(RouteError::MissingIdentifier),
             };
 
-            // Try getting the localpart out of the MXID
-            let username = homeserver.localpart(&user).unwrap_or(&user);
+            // Whatever they typed, find the one account behind it.
+            let user =
+                resolve_login_identifier(&mut repo, homeserver.as_ref(), typed).await?;
 
             user_password_login(
                 &mut rng,
@@ -368,7 +442,7 @@ pub(crate) async fn post(
                     user_agent: user_agent.clone(),
                 },
                 site_config.session_limit.as_ref(),
-                username,
+                &user,
                 password,
                 input.device_id, // TODO check for validity
                 input.initial_device_display_name,
@@ -906,19 +980,11 @@ async fn user_password_login(
     policy: &mut Policy,
     policy_requester: Requester,
     session_limit_config: Option<&SessionLimitConfig>,
-    username: &str,
+    user: &User,
     password: String,
     requested_device_id: Option<String>,
     initial_device_display_name: Option<String>,
 ) -> Result<(CompatSession, User), RouteError> {
-    // Find the user
-    let user = repo
-        .user()
-        .find_by_username(username)
-        .await?
-        .filter(|user| user.deactivated_at.is_none())
-        .ok_or(RouteError::UserNotFound)?;
-
     if user.locked_at.is_some() {
         return Err(RouteError::UserLocked);
     }
@@ -1006,7 +1072,7 @@ async fn user_password_login(
         )
         .await?;
 
-    Ok((session, user))
+    Ok((session, user.clone()))
 }
 
 #[cfg(test)]
