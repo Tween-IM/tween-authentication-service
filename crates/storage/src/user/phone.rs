@@ -8,6 +8,8 @@ use mas_data_model::{Clock, User, UserPhone};
 use rand_core::RngCore;
 use ulid::Ulid;
 
+use crate::repository_impl;
+
 /// A filter for [`UserPhoneRepository`]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct UserPhoneFilter<'a> {
@@ -140,3 +142,26 @@ pub trait UserPhoneRepository: Send + Sync {
     /// Returns [`Self::Error`] if the underlying repository fails
     async fn remove(&mut self, user_phone: UserPhone) -> Result<(), Self::Error>;
 }
+
+repository_impl!(UserPhoneRepository:
+    async fn lookup(&mut self, id: Ulid) -> Result<Option<UserPhone>, Self::Error>;
+    async fn find_by_phone_number(
+        &mut self,
+        phone_number: &str,
+    ) -> Result<Option<UserPhone>, Self::Error>;
+    async fn find(
+        &mut self,
+        user: &User,
+        phone_number: &str,
+    ) -> Result<Option<UserPhone>, Self::Error>;
+    async fn all(&mut self, user: &User) -> Result<Vec<UserPhone>, Self::Error>;
+    async fn count(&mut self, filter: UserPhoneFilter<'_>) -> Result<usize, Self::Error>;
+    async fn add(
+        &mut self,
+        rng: &mut (dyn RngCore + Send),
+        clock: &dyn Clock,
+        user: &User,
+        phone_number: String,
+    ) -> Result<UserPhone, Self::Error>;
+    async fn remove(&mut self, user_phone: UserPhone) -> Result<(), Self::Error>;
+);

@@ -28,7 +28,8 @@ use mas_storage::{
         UpstreamOAuthSessionRepository,
     },
     user::{
-        BrowserSessionRepository, UserEmailRepository, UserPasswordRepository,
+        BrowserSessionRepository, UserEmailRepository,
+    UserPhoneRepository, UserPasswordRepository,
         UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
         UserRepository, UserTermsRepository,
     },
@@ -60,7 +61,8 @@ use crate::{
         PgUpstreamOAuthSessionRepository,
     },
     user::{
-        PgBrowserSessionRepository, PgUserEmailRepository, PgUserPasswordRepository,
+        PgBrowserSessionRepository, PgUserEmailRepository,
+    PgUserPhoneRepository, PgUserPasswordRepository,
         PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
         PgUserRepository, PgUserTermsRepository,
     },
@@ -228,6 +230,10 @@ where
 
     fn user_email<'c>(&'c mut self) -> Box<dyn UserEmailRepository<Error = Self::Error> + 'c> {
         Box::new(PgUserEmailRepository::new(self.conn.as_mut()))
+    }
+
+    fn user_phone<'c>(&'c mut self) -> Box<dyn UserPhoneRepository<Error = Self::Error> + 'c> {
+        Box::new(PgUserPhoneRepository::new(self.conn.as_mut()))
     }
 
     fn user_password<'c>(
