@@ -198,6 +198,19 @@ pub struct UserEmail {
     pub created_at: DateTime<Utc>,
 }
 
+/// A phone number owned by a [`User`], in E.164.
+///
+/// Verified numbers used to end at `matrix_msisdn_validations`, which expires
+/// with the request that proved them; this is where a number lives once the user
+/// claims it, which is what makes it usable for sign-in and one-time codes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct UserPhone {
+    pub id: Ulid,
+    pub user_id: Ulid,
+    pub phone_number: String,
+    pub created_at: DateTime<Utc>,
+}
+
 impl UserEmail {
     #[must_use]
     pub fn samples(now: chrono::DateTime<Utc>, rng: &mut impl Rng) -> Vec<Self> {
