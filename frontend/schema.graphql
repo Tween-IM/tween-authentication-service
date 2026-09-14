@@ -538,6 +538,32 @@ enum CompleteEmailAuthenticationStatus {
   IN_USE
 }
 
+input CompleteRegistrationStepInput {
+  sessionId: ID!
+  stepType: RegistrationStepType!
+  """
+  Step-specific data. For `EmailVerification`: JSON `{"code": "123456"}`
+  """
+  data: JSON
+}
+
+"""
+The payload for the `completeRegistrationStep` mutation.
+"""
+type CompleteRegistrationStepPayload {
+  status: CompleteRegistrationStepStatus!
+  user: User
+  browserSession: BrowserSession
+  nextSteps: [RegistrationStep!]
+  errors: [RegistrationFieldError!]
+}
+
+enum CompleteRegistrationStepStatus {
+  COMPLETE
+  PENDING
+  FAILED
+}
+
 """
 The input of the `createOauth2Session` mutation.
 """
@@ -779,6 +805,11 @@ enum EndOAuth2SessionStatus {
 }
 
 """
+A scalar that can represent any JSON value.
+"""
+scalar JSON
+
+"""
 The input for the `lockUser` mutation.
 """
 input LockUserInput {
@@ -932,6 +963,18 @@ type Mutation {
   field.
   """
   deactivateUser(input: DeactivateUserInput!): DeactivateUserPayload!
+  """
+  Initiate a user registration.
+  """
+  registerUserInitiate(
+    input: RegisterUserInitiateInput!
+  ): RegisterUserInitiatePayload!
+  completeRegistrationStep(
+    input: CompleteRegistrationStepInput!
+  ): CompleteRegistrationStepPayload!
+  resendRegistrationEmail(
+    input: ResendRegistrationEmailInput!
+  ): ResendRegistrationEmailPayload!
   """
   Create a new arbitrary OAuth 2.0 Session.
 
@@ -1263,6 +1306,97 @@ type Query {
 }
 
 """
+The input for the `registerUserInitiate` mutation.
+"""
+input RegisterUserInitiateInput {
+  """
+  Desired username (localpart).
+  """
+  username: String!
+  """
+  Account password.
+  """
+  password: String!
+  """
+  Password confirmation. Must match `password`.
+  """
+  passwordConfirm: String
+  """
+  Optional email address. Required if server config says so.
+  """
+  email: String
+  """
+  Optional registration token. Required if server config says so.
+  """
+  registrationToken: String
+  """
+  Whether the user accepts the terms of service. Required if the server
+  has a `ToS`.
+  """
+  acceptTerms: Boolean
+  """
+  The language to use for emails.
+  """
+  language: String! = "en"
+  """
+  CAPTCHA response. Required if the server has CAPTCHA configured.
+  """
+  captchaResponse: String
+}
+
+"""
+The payload for the `registerUserInitiate` mutation.
+"""
+type RegisterUserInitiatePayload {
+  status: RegisterUserInitiateStatus!
+  user: User
+  browserSession: BrowserSession
+  sessionId: ID
+  nextSteps: [RegistrationStep!]
+  errors: [RegistrationFieldError!]
+}
+
+"""
+The status of the `registerUserInitiate` mutation.
+"""
+enum RegisterUserInitiateStatus {
+  """
+  Registration is complete; user and session were created.
+  """
+  COMPLETE
+  """
+  Additional steps are required before registration finishes.
+  """
+  PENDING
+  """
+  Input validation failed.
+  """
+  FAILED
+}
+
+"""
+A field-level validation error.
+"""
+type RegistrationFieldError {
+  field: String!
+  message: String!
+}
+
+"""
+A step descriptor.
+"""
+type RegistrationStep {
+  stepType: RegistrationStepType!
+}
+
+"""
+A step the client must complete to finish registration.
+"""
+enum RegistrationStepType {
+  EMAIL_VERIFICATION
+}
+
+"""
 The input for the `removeEmail` mutation
 """
 input RemoveEmailInput {
@@ -1395,6 +1529,20 @@ enum ResendRecoveryEmailStatus {
   The recovery email was sent.
   """
   SENT
+}
+
+input ResendRegistrationEmailInput {
+  sessionId: ID!
+}
+
+type ResendRegistrationEmailPayload {
+  status: ResendRegistrationEmailStatus!
+  errors: [RegistrationFieldError!]
+}
+
+enum ResendRegistrationEmailStatus {
+  SENT
+  FAILED
 }
 
 """
@@ -1752,6 +1900,15 @@ type SiteConfig implements Node {
   Whether passwords are enabled and users can register using a password.
   """
   passwordRegistrationEnabled: Boolean!
+  """
+  Whether a registration token is required for password-based
+  registration.
+  """
+  registrationTokenRequired: Boolean!
+  """
+  Whether an email address is required for password-based registration.
+  """
+  passwordRegistrationEmailRequired: Boolean!
   """
   Whether users can delete their own account.
   """
