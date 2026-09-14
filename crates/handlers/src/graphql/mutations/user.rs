@@ -457,7 +457,8 @@ struct RegisterUserInitiateInput {
     /// Optional registration token. Required if server config says so.
     registration_token: Option<String>,
 
-    /// Whether the user accepts the terms of service. Required if the server has a `ToS`.
+    /// Whether the user accepts the terms of service. Required if the server
+    /// has a `ToS`.
     accept_terms: Option<bool>,
 
     /// The language to use for emails.
@@ -532,9 +533,7 @@ impl RegisterUserInitiatePayload {
 
     async fn browser_session(&self) -> Option<crate::graphql::model::BrowserSession> {
         match self {
-            Self::Complete(inner) => {
-                Some(crate::graphql::model::BrowserSession(inner.1.clone()))
-            }
+            Self::Complete(inner) => Some(crate::graphql::model::BrowserSession(inner.1.clone())),
             _ => None,
         }
     }
@@ -755,8 +754,8 @@ impl UserMutations {
 
         let user = repo.user().lock(&state.clock(), user).await?;
 
-        // Schedule a job to provision the user so that the lock flag is propagated
-        // to Synapse
+        // Schedule a job to provision the user so that the lock flag is
+        // propagated to Synapse
         repo.queue_job()
             .schedule_job(&mut rng, &clock, ProvisionUserJob::new(&user))
             .await?;
@@ -804,8 +803,8 @@ impl UserMutations {
         let user = repo.user().reactivate(user).await?;
         let user = repo.user().unlock(user).await?;
 
-        // Schedule a job to provision the user so that the lock flag is propagated
-        // to Synapse
+        // Schedule a job to provision the user so that the lock flag is
+        // propagated to Synapse
         repo.queue_job()
             .schedule_job(&mut rng, &clock, ProvisionUserJob::new(&user))
             .await?;
@@ -940,9 +939,10 @@ impl UserMutations {
             }
 
             let Some(active_password) = repo.user_password().active(&user).await? else {
-                // The user has no current password, so can't verify against one.
-                // In the future, it may be desirable to let the user set a password without any
-                // other verification instead.
+                // The user has no current password, so can't verify against
+                // one. In the future, it may be desirable to
+                // let the user set a password without any other
+                // verification instead.
 
                 return Ok(SetPasswordPayload {
                     status: SetPasswordStatus::NoCurrentPassword,
@@ -1313,10 +1313,7 @@ impl UserMutations {
         let registration_token_id = if site_config.registration_token_required {
             match input.registration_token {
                 Some(token) if !token.is_empty() => {
-                    let token_record = repo
-                        .user_registration_token()
-                        .find_by_token(&token)
-                        .await?;
+                    let token_record = repo.user_registration_token().find_by_token(&token).await?;
                     match token_record {
                         Some(t) if t.is_valid(clock.now()) => Some(t.id),
                         _ => {
@@ -1360,7 +1357,10 @@ impl UserMutations {
                 )
                 .await
             {
-                tracing::warn!(error = &e as &dyn std::error::Error, "CAPTCHA verification failed");
+                tracing::warn!(
+                    error = &e as &dyn std::error::Error,
+                    "CAPTCHA verification failed"
+                );
                 errors.push(RegistrationFieldError {
                     field: "captcha".to_owned(),
                     message: "CAPTCHA verification failed".to_owned(),
@@ -1440,7 +1440,14 @@ impl UserMutations {
 
         let registration = repo
             .user_registration()
-            .add(&mut *rng, &*clock, input.username.clone(), ip_address, user_agent, post_auth_action_value)
+            .add(
+                &mut *rng,
+                &*clock,
+                input.username.clone(),
+                ip_address,
+                user_agent,
+                post_auth_action_value,
+            )
             .await?;
 
         // Set terms URL if present
@@ -1462,10 +1469,7 @@ impl UserMutations {
                 .schedule_job(
                     &mut *rng,
                     &*clock,
-                    SendEmailAuthenticationCodeJob::new(
-                        &user_email_auth,
-                        input.language,
-                    ),
+                    SendEmailAuthenticationCodeJob::new(&user_email_auth, input.language),
                 )
                 .await?;
             repo.user_registration()
@@ -1520,7 +1524,9 @@ impl UserMutations {
             )
             .await?;
             repo.save().await?;
-            return Ok(RegisterUserInitiatePayload::Complete(Box::new((user, session))));
+            return Ok(RegisterUserInitiatePayload::Complete(Box::new((
+                user, session,
+            ))));
         }
 
         repo.save().await?;
@@ -1650,16 +1656,12 @@ impl UserMutations {
         }
 
         if next_steps.is_empty() {
-            let (user, session) = Self::complete_registration(
-                &mut repo,
-                &*clock,
-                rng,
-                refreshed,
-                homeserver,
-            )
-            .await?;
+            let (user, session) =
+                Self::complete_registration(&mut repo, &*clock, rng, refreshed, homeserver).await?;
             repo.save().await?;
-            return Ok(CompleteRegistrationStepPayload::Complete(Box::new((user, session))));
+            return Ok(CompleteRegistrationStepPayload::Complete(Box::new((
+                user, session,
+            ))));
         }
 
         repo.save().await?;
@@ -1698,7 +1700,9 @@ impl UserMutations {
                 .context("Email authentication not found")
                 .map_err(|e: anyhow::Error| async_graphql::Error::new(e.to_string()))?;
 
-            if let Err(e) = limiter.check_email_authentication_send_code(requester.fingerprint(), &email_auth) {
+            if let Err(e) =
+                limiter.check_email_authentication_send_code(requester.fingerprint(), &email_auth)
+            {
                 tracing::warn!(error = &e as &dyn std::error::Error);
                 return Ok(ResendRegistrationEmailPayload {
                     status: ResendRegistrationEmailStatus::Failed,
@@ -1741,18 +1745,22 @@ impl UserMutations {
         registration: mas_data_model::UserRegistration,
         homeserver: &dyn mas_matrix::HomeserverConnection,
     ) -> Result<(mas_data_model::User, mas_data_model::BrowserSession), async_graphql::Error> {
-        use mas_storage::queue::QueueJobRepositoryExt;
-        use mas_storage::queue::ProvisionUserJob;
-        use mas_storage::user::{
-            BrowserSessionRepository, UserEmailFilter, UserPasswordRepository,
-            UserRegistrationTokenRepository, UserTermsRepository,
+        use mas_storage::{
+            queue::{ProvisionUserJob, QueueJobRepositoryExt},
+            user::{
+                BrowserSessionRepository, UserEmailFilter, UserPasswordRepository,
+                UserRegistrationTokenRepository, UserTermsRepository,
+            },
         };
 
         // Final availability checks
         if repo.user().exists(&registration.username).await? {
             return Err(async_graphql::Error::new("Username is already taken"));
         }
-        if !homeserver.is_localpart_available(&registration.username).await? {
+        if !homeserver
+            .is_localpart_available(&registration.username)
+            .await?
+        {
             return Err(async_graphql::Error::new("Username is not available"));
         }
 
@@ -1778,7 +1786,10 @@ impl UserMutations {
         };
 
         // Mark registration completed
-        let registration = repo.user_registration().complete(clock, registration).await?;
+        let registration = repo
+            .user_registration()
+            .complete(clock, registration)
+            .await?;
 
         // Use token if present
         if let Some(token_id) = registration.user_registration_token_id {
@@ -1843,9 +1854,7 @@ impl UserMutations {
         if let Some(display_name) = registration.display_name {
             job = job.set_display_name(display_name);
         }
-        repo.queue_job()
-            .schedule_job(&mut *rng, clock, job)
-            .await?;
+        repo.queue_job().schedule_job(&mut *rng, clock, job).await?;
 
         Ok((user, session))
     }

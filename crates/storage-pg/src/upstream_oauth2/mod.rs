@@ -174,7 +174,8 @@ mod tests {
         assert!(!session.is_consumed());
         assert_eq!(session.link_id(), Some(link.id));
 
-        // We need to create a user and start a browser session to consume the session
+        // We need to create a user and start a browser session to consume the
+        // session
         let user = repo
             .user()
             .add(&mut rng, &clock, "john".to_owned())
@@ -226,7 +227,8 @@ mod tests {
 
         assert_eq!(repo.upstream_oauth_link().count(filter).await.unwrap(), 1);
 
-        // Filtering on a case-insensitive partial human_account_name should match
+        // Filtering on a case-insensitive partial human_account_name should
+        // match
         let matching_filter = UpstreamOAuthLinkFilter::new().matching_human_account_name("LICE");
         let links = repo
             .upstream_oauth_link()
@@ -427,8 +429,8 @@ mod tests {
         let edge_ids: Vec<_> = page.edges.iter().map(|p| p.node.id).collect();
         assert_eq!(&edge_ids, &ids[..10]);
 
-        // Getting the same page with the "enabled only" filter should return the same
-        // results
+        // Getting the same page with the "enabled only" filter should return
+        // the same results
         let other_page = repo
             .upstream_oauth_provider()
             .list(filter.enabled_only(), Pagination::first(10))

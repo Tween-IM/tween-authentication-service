@@ -338,8 +338,8 @@ impl Serialize for EmptyContext {
         S: serde::Serializer,
     {
         let mut s = serializer.serialize_struct("EmptyContext", 0)?;
-        // FIXME: for some reason, serde seems to not like struct flattening with empty
-        // stuff
+        // FIXME: for some reason, serde seems to not like struct flattening
+        // with empty stuff
         s.serialize_field("__UNUSED", &())?;
         s.end()
     }
@@ -1969,8 +1969,9 @@ impl TemplateContext for AccountInactiveContext {
             User::samples(now, rng)
                 .into_iter()
                 .flat_map(|user| {
-                    // Cover both the "no continuation" and "with continuation" render
-                    // paths so the template gallery exercises the hidden inputs.
+                    // Cover both the "no continuation" and "with continuation"
+                    // render paths so the template gallery
+                    // exercises the hidden inputs.
                     [
                         AccountInactiveContext::new(user.clone()),
                         AccountInactiveContext::new(user)

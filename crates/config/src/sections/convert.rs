@@ -70,7 +70,9 @@ impl ConvertConfig {
     /// Whether Convert delivery is configured.
     #[must_use]
     pub fn enabled(&self) -> bool {
-        self.api_key.as_deref().is_some_and(|key| !key.trim().is_empty())
+        self.api_key
+            .as_deref()
+            .is_some_and(|key| !key.trim().is_empty())
     }
 
     /// Whether webhook deliveries can be verified.

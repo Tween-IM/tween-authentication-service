@@ -77,7 +77,8 @@ pub(crate) async fn get(
     // the browser recently signed out, which we expose to the
     // `additional_authorization_parameters` templates as `logged_out` so that
     // operators can force a fresh prompt at the upstream provider. We consider
-    // that we were logged out recently if we logged out within the last 5 minutes.
+    // that we were logged out recently if we logged out within the last 5
+    // minutes.
     let (session_info, cookie_jar) = cookie_jar.session_info();
     let logged_out = session_info
         .logged_out_at()
@@ -510,7 +511,8 @@ mod tests {
             location(&response)
         );
 
-        // Sign out (the CSRF cookie is still valid within the fixed test clock).
+        // Sign out (the CSRF cookie is still valid within the fixed test
+        // clock).
         let request = cookies.with_cookies(Request::post(mas_router::Logout::PATH).form(
             serde_json::json!({
                 "csrf": csrf_token,
@@ -531,7 +533,8 @@ mod tests {
             location(&response)
         );
 
-        // Wait a few minutes, past the 5min threshold: we shouldn't see `prompt=login`.
+        // Wait a few minutes, past the 5min threshold: we shouldn't see
+        // `prompt=login`.
         state.clock.advance(Duration::minutes(6));
 
         let request = cookies.with_cookies(Request::get(authorize.as_str()).empty());

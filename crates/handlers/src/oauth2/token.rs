@@ -306,8 +306,9 @@ pub(crate) async fn post(
         .verify(&http_client, &encrypter, method, &client)
         .await
         .map_err(|err| {
-            // Classify the error differntly, depending on whether it's an 'internal' error,
-            // or just because the client presented invalid credentials.
+            // Classify the error differntly, depending on whether it's an
+            // 'internal' error, or just because the client
+            // presented invalid credentials.
             if err.is_internal() {
                 RouteError::ClientCredentialsVerification {
                     client_id: client.id,
@@ -453,7 +454,8 @@ async fn authorization_code_grant(
         } => {
             warn!(%exchanged_at, %fulfilled_at, "Authorization code was already exchanged");
 
-            // Ending the session if the token was already exchanged more than 20s ago
+            // Ending the session if the token was already exchanged more than
+            // 20s ago
             if now - exchanged_at > Duration::microseconds(20 * 1000 * 1000) {
                 warn!(oauth_session.id = %session_id, "Ending potentially compromised session");
                 let session = repo
@@ -494,7 +496,8 @@ async fn authorization_code_grant(
         });
     }
 
-    // This should never happen, since we looked up in the database using the code
+    // This should never happen, since we looked up in the database using the
+    // code
     let code = authz_grant
         .code
         .as_ref()
@@ -587,15 +590,17 @@ async fn authorization_code_grant(
     // Look for device to provision
     for scope in &*session.scope {
         if let Some(device) = Device::from_scope_token(scope) {
-            // Normally, devices get synced to the homeserver in a `SyncDevicesJob` but we
-            // want the device to be created synchronously on the homeserver, so
-            // that when we respond, the access token works completely. If the
+            // Normally, devices get synced to the homeserver in a
+            // `SyncDevicesJob` but we want the device to be created
+            // synchronously on the homeserver, so that when we
+            // respond, the access token works completely. If the
             // device doesn't exist on the homeserver side, token introspection
             // from Synapse to MAS will work but Synapse will return a 401
             // because it doesn't see the device.
             //
-            // We're using an upsert so if the device already exists for some reason
-            // (like when a concurrent device sync happening) it won't have any effect.
+            // We're using an upsert so if the device already exists for some
+            // reason (like when a concurrent device sync happening)
+            // it won't have any effect.
             homeserver
                 .upsert_device(
                     &browser_session.user.username,
@@ -611,9 +616,9 @@ async fn authorization_code_grant(
         .exchange(clock, authz_grant, &session)
         .await?;
 
-    // XXX: there is a potential (but unlikely) race here, where the activity for
-    // the session is recorded before the transaction is committed. We would have to
-    // save the repository here to fix that.
+    // XXX: there is a potential (but unlikely) race here, where the activity
+    // for the session is recorded before the transaction is committed. We
+    // would have to save the repository here to fix that.
     activity_tracker
         .record_oauth2_session(clock, &session)
         .await;
@@ -670,13 +675,14 @@ async fn refresh_token_grant(
     }
 
     if !refresh_token.is_valid() {
-        // We're seing a refresh token that already has been consumed, this might be a
-        // double-refresh or a replay attack
+        // We're seing a refresh token that already has been consumed, this
+        // might be a double-refresh or a replay attack
 
         // First, get the next refresh token
         let Some(next_refresh_token_id) = refresh_token.next_refresh_token_id() else {
-            // If we don't have a 'next' refresh token, it may just be because this was
-            // before we were recording those. Let's just treat it as a replay.
+            // If we don't have a 'next' refresh token, it may just be because
+            // this was before we were recording those. Let's just
+            // treat it as a replay.
             return Err(RouteError::RefreshTokenInvalid(refresh_token.id));
         };
 
@@ -699,30 +705,33 @@ async fn refresh_token_grant(
 
         // Check if the associated access token was already used.
         //
-        // If the access token is no longer present, we assume it was *not* used.
-        // Tokens can disappear for two main reasons:
+        // If the access token is no longer present, we assume it was *not*
+        // used. Tokens can disappear for two main reasons:
         //
         //  - revoked access tokens are deleted after 1 hour
         //  - expired access tokens are deleted after 30 days
         //
-        // Revoked tokens are not an issue, as the associated refresh token is also
-        // revoked. For expired tokens, however, we are effectively losing the
-        // ability to prevent the client from performing a bad double-refresh.
-        // This measure is intended to enhance security when a refresh token
-        // leaks. However, the primary goal is to ensure that we do not maintain
-        // two active branches of the refresh token tree.
+        // Revoked tokens are not an issue, as the associated refresh token is
+        // also revoked. For expired tokens, however, we are effectively
+        // losing the ability to prevent the client from performing a
+        // bad double-refresh. This measure is intended to enhance
+        // security when a refresh token leaks. However, the primary
+        // goal is to ensure that we do not maintain two active branches
+        // of the refresh token tree.
         //
         // Consider these two scenarios:
         //
-        //   - Refresh token A is consumed, issuing refresh token B and access token C.
+        //   - Refresh token A is consumed, issuing refresh token B and access
+        //     token C.
         //   - The client uses access token C.
         //   - Access token C expires after some time.
         //   - If the client then attempts to use refresh token A again:
-        //      - If access token C is still present, the refresh will be rightfully
-        //        declined, as we have proof that it received the new set of tokens.
-        //      - If access token C was cleaned up, the refresh will succeed, issuing
-        //        new tokens but invalidating refresh token B and the original access
-        //        token C.
+        //      - If access token C is still present, the refresh will be
+        //        rightfully declined, as we have proof that it received the new
+        //        set of tokens.
+        //      - If access token C was cleaned up, the refresh will succeed,
+        //        issuing new tokens but invalidating refresh token B and the
+        //        original access token C.
         if let Some(access_token_id) = next_refresh_token.access_token_id {
             // Load it
             let next_access_token = repo
@@ -735,7 +744,8 @@ async fn refresh_token_grant(
                 })?;
 
             if next_access_token.is_used() {
-                // XXX: This is a replay, we *may* want to invalidate the session
+                // XXX: This is a replay, we *may* want to invalidate the
+                // session
                 return Err(RouteError::RefreshTokenInvalid(next_refresh_token.id));
             }
 
@@ -856,9 +866,9 @@ async fn client_credentials_grant(
 
     let mut params = AccessTokenResponse::new(access_token.access_token).with_expires_in(ttl);
 
-    // XXX: there is a potential (but unlikely) race here, where the activity for
-    // the session is recorded before the transaction is committed. We would have to
-    // save the repository here to fix that.
+    // XXX: there is a potential (but unlikely) race here, where the activity
+    // for the session is recorded before the transaction is committed. We
+    // would have to save the repository here to fix that.
     activity_tracker
         .record_oauth2_session(clock, &session)
         .await;
@@ -969,8 +979,8 @@ async fn device_code_grant(
     let mut params =
         AccessTokenResponse::new(access_token.access_token.clone()).with_expires_in(ttl);
 
-    // If the client uses the refresh token grant type, we also generate a refresh
-    // token
+    // If the client uses the refresh token grant type, we also generate a
+    // refresh token
     if client.grant_types.contains(&GrantType::RefreshToken) {
         let refresh_token_str = TokenType::RefreshToken.generate(rng);
 
@@ -1007,15 +1017,17 @@ async fn device_code_grant(
     // Look for device to provision
     for scope in &*session.scope {
         if let Some(device) = Device::from_scope_token(scope) {
-            // Normally, devices get synced to the homeserver in a `SyncDevicesJob` but we
-            // want the device to be created synchronously on the homeserver, so
-            // that when we respond, the access token works completely. If the
+            // Normally, devices get synced to the homeserver in a
+            // `SyncDevicesJob` but we want the device to be created
+            // synchronously on the homeserver, so that when we
+            // respond, the access token works completely. If the
             // device doesn't exist on the homeserver side, token introspection
             // from Synapse to MAS will work but Synapse will return a 401
             // because it doesn't see the device.
             //
-            // We're using an upsert so if the device already exists for some reason
-            // (like when a concurrent device sync happening) it won't have any effect.
+            // We're using an upsert so if the device already exists for some
+            // reason (like when a concurrent device sync happening)
+            // it won't have any effect.
             homeserver
                 .upsert_device(
                     &browser_session.user.username,
@@ -1027,9 +1039,9 @@ async fn device_code_grant(
         }
     }
 
-    // XXX: there is a potential (but unlikely) race here, where the activity for
-    // the session is recorded before the transaction is committed. We would have to
-    // save the repository here to fix that.
+    // XXX: there is a potential (but unlikely) race here, where the activity
+    // for the session is recorded before the transaction is committed. We
+    // would have to save the repository here to fix that.
     activity_tracker
         .record_oauth2_session(clock, &session)
         .await;
@@ -1077,8 +1089,9 @@ mod tests {
 
         let ClientRegistrationResponse { client_id, .. } = response.json();
 
-        // Let's provision a user and create a session for them. This part is hard to
-        // test with just HTTP requests, so we'll use the repository directly.
+        // Let's provision a user and create a session for them. This part is
+        // hard to test with just HTTP requests, so we'll use the
+        // repository directly.
         let mut repo = state.repository().await.unwrap();
 
         let user = repo
@@ -1264,8 +1277,9 @@ mod tests {
 
         let ClientRegistrationResponse { client_id, .. } = response.json();
 
-        // Let's provision a user and create a session for them. This part is hard to
-        // test with just HTTP requests, so we'll use the repository directly.
+        // Let's provision a user and create a session for them. This part is
+        // hard to test with just HTTP requests, so we'll use the
+        // repository directly.
         let mut repo = state.repository().await.unwrap();
 
         let user = repo
@@ -1386,8 +1400,9 @@ mod tests {
 
         let ClientRegistrationResponse { client_id, .. } = response.json();
 
-        // Let's provision a user and create a session for them. This part is hard to
-        // test with just HTTP requests, so we'll use the repository directly.
+        // Let's provision a user and create a session for them. This part is
+        // hard to test with just HTTP requests, so we'll use the
+        // repository directly.
         let mut repo = state.repository().await.unwrap();
 
         let user = repo
@@ -1451,8 +1466,8 @@ mod tests {
         first_response.assert_status(StatusCode::OK);
         let first_response: AccessTokenResponse = first_response.json();
 
-        // Call a second time, it should work, as we haven't done anything yet with the
-        // token
+        // Call a second time, it should work, as we haven't done anything yet
+        // with the token
         let request =
             Request::post(mas_router::OAuth2TokenEndpoint::PATH).form(serde_json::json!({
                 "grant_type": "refresh_token",
@@ -1523,8 +1538,8 @@ mod tests {
         fifth_response.assert_status(StatusCode::OK);
         let fifth_response: AccessTokenResponse = fifth_response.json();
 
-        // But now, if we re-do with the second_response.refresh_token, it should
-        // fail
+        // But now, if we re-do with the second_response.refresh_token, it
+        // should fail
         let request =
             Request::post(mas_router::OAuth2TokenEndpoint::PATH).form(serde_json::json!({
                 "grant_type": "refresh_token",
@@ -1554,8 +1569,8 @@ mod tests {
         state.clock.advance(Duration::days(31));
         state.run_jobs_in_queue().await;
 
-        // We're not supposed to be able to use the fourth refresh token, but here we
-        // are
+        // We're not supposed to be able to use the fourth refresh token, but
+        // here we are
         let request =
             Request::post(mas_router::OAuth2TokenEndpoint::PATH).form(serde_json::json!({
                 "grant_type": "refresh_token",
@@ -1566,7 +1581,8 @@ mod tests {
         let seventh_response = state.request(request).await;
         seventh_response.assert_status(StatusCode::OK);
 
-        // And the refresh token we had on the fifth response should now be invalid
+        // And the refresh token we had on the fifth response should now be
+        // invalid
         let request =
             Request::post(mas_router::OAuth2TokenEndpoint::PATH).form(serde_json::json!({
                 "grant_type": "refresh_token",
@@ -1666,7 +1682,8 @@ mod tests {
         let ClientError { error, .. } = response.json();
         assert_eq!(error, ClientErrorCode::InvalidScope);
 
-        // Now, if we add the client to the admin list in the policy, it should work
+        // Now, if we add the client to the admin list in the policy, it should
+        // work
         let state = {
             let mut state = state;
             state.policy_factory = crate::test_utils::policy_factory(
@@ -1755,9 +1772,9 @@ mod tests {
         let ClientError { error, .. } = response.json();
         assert_eq!(error, ClientErrorCode::AuthorizationPending);
 
-        // Let's provision a user and create a browser session for them. This part is
-        // hard to test with just HTTP requests, so we'll use the repository
-        // directly.
+        // Let's provision a user and create a browser session for them. This
+        // part is hard to test with just HTTP requests, so we'll use
+        // the repository directly.
         let mut repo = state.repository().await.unwrap();
 
         let user = repo
@@ -1804,7 +1821,8 @@ mod tests {
 
         // Check that the token is valid
         assert!(state.is_access_token_valid(&response.access_token).await);
-        // We advertised the refresh token grant type, so we should have a refresh token
+        // We advertised the refresh token grant type, so we should have a
+        // refresh token
         assert!(response.refresh_token.is_some());
         // We asked for the openid scope, so we should have an ID token
         assert!(response.id_token.is_some());
@@ -1959,7 +1977,8 @@ mod tests {
         .await
         .unwrap();
 
-        // Provision a client (without device_code grant, since registration rejects it)
+        // Provision a client (without device_code grant, since registration
+        // rejects it)
         let request =
             Request::post(mas_router::OAuth2RegistrationEndpoint::PATH).json(serde_json::json!({
                 "client_uri": "https://example.com/",

@@ -1,4 +1,9 @@
-use axum::{body::Bytes, extract::State, http::{HeaderMap, StatusCode}, response::IntoResponse};
+use axum::{
+    body::Bytes,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+};
 use mas_tasks::convert::ConvertClient;
 use serde_json::Value;
 use sqlx::PgPool;
@@ -69,10 +74,15 @@ pub async fn webhook(
     body: Bytes,
 ) -> impl IntoResponse {
     if !convert.webhooks_enabled() {
-        return (StatusCode::SERVICE_UNAVAILABLE, "Convert webhooks are not configured");
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Convert webhooks are not configured",
+        );
     }
 
-    let signature = headers.get(SIGNATURE_HEADER).and_then(|value| value.to_str().ok());
+    let signature = headers
+        .get(SIGNATURE_HEADER)
+        .and_then(|value| value.to_str().ok());
     if !convert.verify_webhook(signature, &body) {
         return (StatusCode::UNAUTHORIZED, "Invalid signature");
     }
@@ -89,8 +99,14 @@ pub async fn webhook(
     let message_id = find_message_id(&payload);
 
     // Always keep the event: it is the only record of what Convert told us.
-    let recorded = sqlx::query("INSERT INTO convert_webhook_events (event, message_id, payload) VALUES ($1,$2,$3)")
-        .bind(event).bind(message_id).bind(&payload).execute(&pool).await;
+    let recorded = sqlx::query(
+        "INSERT INTO convert_webhook_events (event, message_id, payload) VALUES ($1,$2,$3)",
+    )
+    .bind(event)
+    .bind(message_id)
+    .bind(&payload)
+    .execute(&pool)
+    .await;
     if recorded.is_err() {
         // Ask Convert to try again rather than silently dropping the event.
         return (StatusCode::INTERNAL_SERVER_ERROR, "Could not record event");
@@ -107,14 +123,18 @@ pub async fn webhook(
 
 #[cfg(test)]
 mod tests {
-    use super::{delivery_status, find_message_id, status_rank};
     use serde_json::json;
+
+    use super::{delivery_status, find_message_id, status_rank};
 
     #[test]
     fn delivery_events_map_to_a_status() {
         assert_eq!(delivery_status("message.delivered"), Some("delivered"));
         assert_eq!(delivery_status("message.bounced"), Some("bounced"));
-        assert_eq!(delivery_status("message.unsubscribed"), Some("unsubscribed"));
+        assert_eq!(
+            delivery_status("message.unsubscribed"),
+            Some("unsubscribed")
+        );
         assert_eq!(delivery_status("campaign.completed"), None);
         assert_eq!(delivery_status("contact.created"), None);
         assert_eq!(delivery_status("something.new"), None);
@@ -122,7 +142,10 @@ mod tests {
 
     #[test]
     fn message_id_is_found_wherever_convert_puts_it() {
-        assert_eq!(find_message_id(&json!({"message_id": "msg_1"})), Some("msg_1"));
+        assert_eq!(
+            find_message_id(&json!({"message_id": "msg_1"})),
+            Some("msg_1")
+        );
         assert_eq!(
             find_message_id(&json!({"data": {"message": {"message_id": "msg_2"}}})),
             Some("msg_2")
@@ -131,7 +154,10 @@ mod tests {
             find_message_id(&json!({"data": {"events": [{"message_id": "msg_3"}]}})),
             Some("msg_3")
         );
-        assert_eq!(find_message_id(&json!({"data": {"status": "delivered"}})), None);
+        assert_eq!(
+            find_message_id(&json!({"data": {"status": "delivered"}})),
+            None
+        );
     }
 
     #[test]

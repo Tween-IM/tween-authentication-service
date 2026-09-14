@@ -28,8 +28,7 @@ use mas_storage::{
         UpstreamOAuthSessionRepository,
     },
     user::{
-        BrowserSessionRepository, UserEmailRepository,
-    UserPhoneRepository, UserPasswordRepository,
+        BrowserSessionRepository, UserEmailRepository, UserPasswordRepository, UserPhoneRepository,
         UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
         UserRepository, UserTermsRepository,
     },
@@ -61,10 +60,9 @@ use crate::{
         PgUpstreamOAuthSessionRepository,
     },
     user::{
-        PgBrowserSessionRepository, PgUserEmailRepository,
-    PgUserPhoneRepository, PgUserPasswordRepository,
-        PgUserRecoveryRepository, PgUserRegistrationRepository, PgUserRegistrationTokenRepository,
-        PgUserRepository, PgUserTermsRepository,
+        PgBrowserSessionRepository, PgUserEmailRepository, PgUserPasswordRepository,
+        PgUserPhoneRepository, PgUserRecoveryRepository, PgUserRegistrationRepository,
+        PgUserRegistrationTokenRepository, PgUserRepository, PgUserTermsRepository,
     },
 };
 

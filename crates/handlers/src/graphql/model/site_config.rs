@@ -46,7 +46,8 @@ pub struct SiteConfig {
     /// Whether passwords are enabled and users can register using a password.
     password_registration_enabled: bool,
 
-    /// Whether a registration token is required for password-based registration.
+    /// Whether a registration token is required for password-based
+    /// registration.
     registration_token_required: bool,
 
     /// Whether an email address is required for password-based registration.

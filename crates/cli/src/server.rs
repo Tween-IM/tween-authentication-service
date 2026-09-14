@@ -208,8 +208,8 @@ async fn log_response_middleware(
 
     let response = next.run(request).await;
 
-    // If the request went through the GraphQL handler, it will have recorded the
-    // operation type and name in the response extensions.
+    // If the request went through the GraphQL handler, it will have recorded
+    // the operation type and name in the response extensions.
     let graphql = response.extensions().get::<GraphQLOperation>();
     let graphql_operation_type = graphql
         .and_then(|operation| operation.operation_type)
@@ -349,11 +349,12 @@ pub fn build_router(
 
     // We normalize the prefix:
     //  - if it's None, it becomes '/'
-    //  - if it's Some(..), any trailing '/' is first trimmed, then a '/' is added
+    //  - if it's Some(..), any trailing '/' is first trimmed, then a '/' is
+    //    added
     let prefix = format!("{}/", prefix.unwrap_or_default().trim_end_matches('/'));
     // Then we only nest the router if the prefix is not empty and not the root
-    // If we blindly nest the router if the prefix is Some("/"), axum will panic as
-    // we're not supposed to nest the router at the root
+    // If we blindly nest the router if the prefix is Some("/"), axum will panic
+    // as we're not supposed to nest the router at the root
     if !prefix.is_empty() && prefix != "/" {
         router = Router::new().nest(&prefix, router);
     }
@@ -485,14 +486,16 @@ pub fn build_listeners(
                     .transpose()?
                     .map(std::fs::Permissions::from_mode);
 
-                // We first bind to a temporary socket, then rename it to the desired path.
-                // This lets us replace an existing socket (binding on an existing socket
-                // doesn't work) and change the permissions of the socket before it being
-                // available.
+                // We first bind to a temporary socket, then rename it to the
+                // desired path. This lets us replace an
+                // existing socket (binding on an existing socket
+                // doesn't work) and change the permissions of the socket before
+                // it being available.
                 let pid = std::process::id();
                 let tmp_socket = socket.with_added_extension(format!("{pid}.tmp"));
 
-                // Delete the temporary socket on drop, to avoid leaving it around if we fail.
+                // Delete the temporary socket on drop, to avoid leaving it
+                // around if we fail.
                 let guard = RemoveOnDrop::new(&tmp_socket);
 
                 let listener = UnixListener::bind(&tmp_socket).context("could not bind socket")?;
@@ -505,7 +508,8 @@ pub fn build_listeners(
 
                 std::fs::rename(&tmp_socket, socket).context("could not rename socket")?;
 
-                // We've successfully set the socket up, we can disarm the guard now.
+                // We've successfully set the socket up, we can disarm the guard
+                // now.
                 guard.disarm();
 
                 listener

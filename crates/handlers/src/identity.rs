@@ -24,10 +24,17 @@ pub struct RequestToken {
 }
 
 #[derive(Serialize)]
-pub struct TokenResponse { pub sid: String, pub submit_url: String }
+pub struct TokenResponse {
+    pub sid: String,
+    pub submit_url: String,
+}
 
 #[derive(Deserialize)]
-pub struct SubmitToken { pub sid: String, pub client_secret: String, pub token: String }
+pub struct SubmitToken {
+    pub sid: String,
+    pub client_secret: String,
+    pub token: String,
+}
 
 pub async fn request_token(
     State(pool): State<PgPool>,
@@ -44,7 +51,12 @@ pub async fn request_token(
         || input.phone_number.trim().is_empty()
         || input.phone_number.len() > 32
     {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"errcode":"M_INVALID_PARAM","error":"Invalid phone verification parameters"})));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(
+                serde_json::json!({"errcode":"M_INVALID_PARAM","error":"Invalid phone verification parameters"}),
+            ),
+        );
     }
     // ULIDs and the code both come from the workspace rng, not the thread's,
     // so a request's randomness is injectable like everywhere else.
@@ -54,20 +66,43 @@ pub async fn request_token(
     // Convert only accepts E.164 for WhatsApp and SMS, so a national number has
     // to be composed with the country the client sent.
     let Some(phone) = normalize_phone(&input.country, &input.phone_number) else {
-        return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"errcode":"M_INVALID_PARAM","error":"Invalid phone number"})));
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"errcode":"M_INVALID_PARAM","error":"Invalid phone number"})),
+        );
     };
     // Every accepted request sends a real message on our Convert account, so
     // the limits are checked before anything is stored or sent.
     if let Err(error) = limiter.check_phone_verification(fingerprint, &phone) {
         tracing::warn!(%error, "Phone verification rate limited");
-        return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({"errcode":"M_LIMIT_EXCEEDED","error":"Too many verification requests. Please try again later."})));
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(
+                serde_json::json!({"errcode":"M_LIMIT_EXCEEDED","error":"Too many verification requests. Please try again later."}),
+            ),
+        );
     }
     let next_link = safe_next_link(input.next_link.as_deref());
     let inserted = sqlx::query("INSERT INTO matrix_msisdn_validations (sid, client_secret_hash, phone_number, token_hash, next_link, expires_at) VALUES ($1,$2,$3,$4,$5,now()+interval '5 minutes')")
         .bind(&sid).bind(secret_hash).bind(&phone).bind(sha256(&code)).bind(next_link).execute(&pool).await;
-    if inserted.is_err() { return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not create validation session"}))); }
-    let Ok(receipt) = convert.send_phone_otp(&phone, &code, &format!("matrix-msisdn-{sid}")).await else {
-        return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not deliver validation code"})));
+    if inserted.is_err() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not create validation session"}),
+            ),
+        );
+    }
+    let Ok(receipt) = convert
+        .send_phone_otp(&phone, &code, &format!("matrix-msisdn-{sid}"))
+        .await
+    else {
+        return (
+            StatusCode::BAD_GATEWAY,
+            Json(
+                serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not deliver validation code"}),
+            ),
+        );
     };
     // Convert's message_id is acceptance, not delivery — recording it is what
     // lets a later delivery webhook find this session. Best effort: the message
@@ -77,20 +112,47 @@ pub async fn request_token(
         let _ = sqlx::query("UPDATE matrix_msisdn_validations SET convert_message_id=$2, delivery_status='accepted', delivery_updated_at=now() WHERE sid=$1")
             .bind(&sid).bind(message_id).execute(&pool).await;
     }
-    (StatusCode::OK, Json(serde_json::json!(TokenResponse { sid, submit_url: "/_matrix/identity/api/v2/validate/msisdn/submitToken".to_owned() })))
+    (
+        StatusCode::OK,
+        Json(serde_json::json!(TokenResponse {
+            sid,
+            submit_url: "/_matrix/identity/api/v2/validate/msisdn/submitToken".to_owned()
+        })),
+    )
 }
 
-pub async fn submit_token(State(pool): State<PgPool>, State(limiter): State<Limiter>, Json(input): Json<SubmitToken>) -> impl IntoResponse {
+pub async fn submit_token(
+    State(pool): State<PgPool>,
+    State(limiter): State<Limiter>,
+    Json(input): Json<SubmitToken>,
+) -> impl IntoResponse {
     if let Err(error) = limiter.check_phone_verification_attempt(&input.sid) {
         tracing::warn!(%error, "Phone verification attempt rate limited");
-        return (StatusCode::TOO_MANY_REQUESTS, Json(serde_json::json!({"errcode":"M_LIMIT_EXCEEDED","error":"Too many attempts. Please request a new code."})));
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(
+                serde_json::json!({"errcode":"M_LIMIT_EXCEEDED","error":"Too many attempts. Please request a new code."}),
+            ),
+        );
     }
     let result = sqlx::query("UPDATE matrix_msisdn_validations SET validated_at=now() WHERE sid=$1 AND client_secret_hash=$2 AND token_hash=$3 AND validated_at IS NULL AND expires_at>now()")
         .bind(input.sid).bind(sha256(&input.client_secret)).bind(sha256(&input.token)).execute(&pool).await;
-    match result { Ok(r) if r.rows_affected() == 1 => (StatusCode::OK, Json(serde_json::json!({"success":true}))), _ => (StatusCode::BAD_REQUEST, Json(serde_json::json!({"success":false}))) }
+    match result {
+        Ok(r) if r.rows_affected() == 1 => {
+            (StatusCode::OK, Json(serde_json::json!({"success":true})))
+        }
+        _ => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({"success":false})),
+        ),
+    }
 }
 
-pub async fn submit_token_get(State(pool): State<PgPool>, State(limiter): State<Limiter>, Query(input): Query<SubmitToken>) -> impl IntoResponse {
+pub async fn submit_token_get(
+    State(pool): State<PgPool>,
+    State(limiter): State<Limiter>,
+    Query(input): Query<SubmitToken>,
+) -> impl IntoResponse {
     if let Err(error) = limiter.check_phone_verification_attempt(&input.sid) {
         tracing::warn!(%error, "Phone verification attempt rate limited");
         return (StatusCode::TOO_MANY_REQUESTS, "Too many attempts").into_response();
@@ -104,7 +166,10 @@ pub async fn submit_token_get(State(pool): State<PgPool>, State(limiter): State<
     }
 }
 
-fn sha256(value: &str) -> Vec<u8> { use sha2::{Digest, Sha256}; Sha256::digest(value.as_bytes()).to_vec() }
+fn sha256(value: &str) -> Vec<u8> {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(value.as_bytes()).to_vec()
+}
 
 /// Only same-origin, relative `next_link` values are honoured.
 ///
@@ -194,20 +259,44 @@ mod tests {
 
     #[test]
     fn national_numbers_get_their_country_code() {
-        assert_eq!(normalize_phone("NG", "8012345678").as_deref(), Some("+2348012345678"));
+        assert_eq!(
+            normalize_phone("NG", "8012345678").as_deref(),
+            Some("+2348012345678")
+        );
         // The trunk prefix is dropped, or the carrier rejects the number.
-        assert_eq!(normalize_phone("ng", "08012345678").as_deref(), Some("+2348012345678"));
-        assert_eq!(normalize_phone("GB", "07400123456").as_deref(), Some("+447400123456"));
-        assert_eq!(normalize_phone("GB", "7400123456").as_deref(), Some("+447400123456"));
+        assert_eq!(
+            normalize_phone("ng", "08012345678").as_deref(),
+            Some("+2348012345678")
+        );
+        assert_eq!(
+            normalize_phone("GB", "07400123456").as_deref(),
+            Some("+447400123456")
+        );
+        assert_eq!(
+            normalize_phone("GB", "7400123456").as_deref(),
+            Some("+447400123456")
+        );
     }
 
     #[test]
     fn international_numbers_are_left_alone() {
-        assert_eq!(normalize_phone("NG", "+2348012345678").as_deref(), Some("+2348012345678"));
-        assert_eq!(normalize_phone("NG", "002348012345678").as_deref(), Some("+2348012345678"));
+        assert_eq!(
+            normalize_phone("NG", "+2348012345678").as_deref(),
+            Some("+2348012345678")
+        );
+        assert_eq!(
+            normalize_phone("NG", "002348012345678").as_deref(),
+            Some("+2348012345678")
+        );
         // Country code sent without the plus is not doubled up.
-        assert_eq!(normalize_phone("NG", "2348012345678").as_deref(), Some("+2348012345678"));
-        assert_eq!(normalize_phone("NG", "+234 801 234 5678").as_deref(), Some("+2348012345678"));
+        assert_eq!(
+            normalize_phone("NG", "2348012345678").as_deref(),
+            Some("+2348012345678")
+        );
+        assert_eq!(
+            normalize_phone("NG", "+234 801 234 5678").as_deref(),
+            Some("+2348012345678")
+        );
     }
 
     #[test]
@@ -223,7 +312,10 @@ mod tests {
     #[test]
     fn only_relative_next_links_survive() {
         assert_eq!(safe_next_link(Some("/home")).as_deref(), Some("/home"));
-        assert_eq!(safe_next_link(Some("  /settings  ")).as_deref(), Some("/settings"));
+        assert_eq!(
+            safe_next_link(Some("  /settings  ")).as_deref(),
+            Some("/settings")
+        );
         assert_eq!(safe_next_link(None), None);
         // Absolute, protocol-relative and backslash tricks are all dropped.
         assert_eq!(safe_next_link(Some("https://evil.example/phish")), None);
@@ -278,7 +370,10 @@ pub async fn claim(State(pool): State<PgPool>, Json(input): Json<Claim>) -> impl
         )
             .into_response(),
         Err(error) => {
-            tracing::error!(error = &error as &dyn std::error::Error, "claiming a phone number failed");
+            tracing::error!(
+                error = &error as &dyn std::error::Error,
+                "claiming a phone number failed"
+            );
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({"success": false, "error": "Internal error"})),

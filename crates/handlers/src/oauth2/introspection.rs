@@ -322,12 +322,12 @@ pub(crate) async fn post(
     }
 
     // Not all device IDs can be encoded as scope. On OAuth 2.0 sessions, we
-    // don't have this problem, as the device ID *is* already encoded as a scope.
-    // But on compatibility sessions, it's possible to have device IDs with
-    // spaces in them, or other weird characters.
-    // In those cases, we prefer explicitly giving out the device ID as a separate
-    // field. The client introspecting tells us whether it supports having the
-    // device ID as a separate field through this header.
+    // don't have this problem, as the device ID *is* already encoded as a
+    // scope. But on compatibility sessions, it's possible to have device
+    // IDs with spaces in them, or other weird characters.
+    // In those cases, we prefer explicitly giving out the device ID as a
+    // separate field. The client introspecting tells us whether it supports
+    // having the device ID as a separate field through this header.
     let supports_explicit_device_id =
         headers.get("X-MAS-Supports-Device-Id") == Some(&HeaderValue::from_static("1"));
 
@@ -364,8 +364,9 @@ pub(crate) async fn post(
                     .await?;
             }
 
-            // The session might not have a user on it (for Client Credentials grants for
-            // example), so we're optionally fetching the user
+            // The session might not have a user on it (for Client Credentials
+            // grants for example), so we're optionally fetching the
+            // user
             let (sub, username) = if let Some(user_id) = session.user_id {
                 let user = repo
                     .user()
@@ -437,8 +438,9 @@ pub(crate) async fn post(
                 return Err(RouteError::InvalidOAuthSession(session.id));
             }
 
-            // The session might not have a user on it (for Client Credentials grants for
-            // example), so we're optionally fetching the user
+            // The session might not have a user on it (for Client Credentials
+            // grants for example), so we're optionally fetching the
+            // user
             let (sub, username) = if let Some(user_id) = session.user_id {
                 let user = repo
                     .user()
@@ -518,11 +520,12 @@ pub(crate) async fn post(
                 return Err(RouteError::InvalidUser(user.id))?;
             }
 
-            // Grant the synapse admin scope if the session has the admin flag set.
+            // Grant the synapse admin scope if the session has the admin flag
+            // set.
             let synapse_admin_scope_opt = session.is_synapse_admin.then_some(SYNAPSE_ADMIN_SCOPE);
 
-            // If the client supports explicitly giving the device ID in the response, skip
-            // encoding it in the scope
+            // If the client supports explicitly giving the device ID in the
+            // response, skip encoding it in the scope
             let device_scope_opt = if supports_explicit_device_id {
                 None
             } else {
@@ -602,11 +605,12 @@ pub(crate) async fn post(
                 return Err(RouteError::InvalidUser(user.id))?;
             }
 
-            // Grant the synapse admin scope if the session has the admin flag set.
+            // Grant the synapse admin scope if the session has the admin flag
+            // set.
             let synapse_admin_scope_opt = session.is_synapse_admin.then_some(SYNAPSE_ADMIN_SCOPE);
 
-            // If the client supports explicitly giving the device ID in the response, skip
-            // encoding it in the scope
+            // If the client supports explicitly giving the device ID in the
+            // response, skip encoding it in the scope
             let device_scope_opt = if supports_explicit_device_id {
                 None
             } else {
@@ -705,7 +709,8 @@ pub(crate) async fn post(
                         .await?
                         .ok_or(RouteError::CantLoadOAuth2Client(owner_client_id))?;
 
-                    // OAuth2 clients are always valid if they're in the database
+                    // OAuth2 clients are always valid if they're in the
+                    // database
                     Some(owner_client.client_id.clone())
                 }
             };
@@ -795,7 +800,8 @@ mod tests {
         let introspecting_client_id = client.client_id;
         let introspecting_client_secret = client.client_secret.unwrap();
 
-        // A separate client + user + oauth2 session, to mint a token to introspect.
+        // A separate client + user + oauth2 session, to mint a token to
+        // introspect.
         let request = Request::post(OAuth2RegistrationEndpoint::PATH).json(json!({
             "client_uri": "https://client.com/",
             "redirect_uris": ["https://client.com/"],
@@ -859,8 +865,8 @@ mod tests {
             .unwrap();
         repo.save().await.unwrap();
 
-        // (1) Introspecting with client credentials: the introspecting client is
-        //     the requester — not alice, who owns the token.
+        // (1) Introspecting with client credentials: the introspecting client
+        // is     the requester — not alice, who owns the token.
         let request = Request::post(OAuth2Introspection::PATH)
             .basic_auth(&introspecting_client_id, &introspecting_client_secret)
             .form(json!({ "token": access_token }));
@@ -871,8 +877,8 @@ mod tests {
             Some(format!("oauth2-client:{}", introspecting_client.id))
         );
 
-        // (2) Introspecting with the homeserver's bearer token: the homeserver is
-        //     the requester.
+        // (2) Introspecting with the homeserver's bearer token: the homeserver
+        // is     the requester.
         let request = Request::post(OAuth2Introspection::PATH)
             .header(
                 "authorization",
@@ -1115,7 +1121,8 @@ mod tests {
         let introspecting_client_id = client.client_id;
         let introspecting_client_secret = client.client_secret.unwrap();
 
-        // Provision a user with a password, so that we can use the password flow
+        // Provision a user with a password, so that we can use the password
+        // flow
         let mut repo = state.repository().await.unwrap();
         let user = repo
             .user()
@@ -1184,8 +1191,9 @@ mod tests {
         assert_eq!(response.scope.as_ref(), Some(&expected_scope));
         assert_eq!(response.device_id.as_deref(), Some(device_id));
 
-        // Check that requesting with X-MAS-Supports-Device-Id removes the device ID
-        // from the scope but not from the explicit device_id field
+        // Check that requesting with X-MAS-Supports-Device-Id removes the
+        // device ID from the scope but not from the explicit device_id
+        // field
         let request = Request::post(OAuth2Introspection::PATH)
             .basic_auth(&introspecting_client_id, &introspecting_client_secret)
             .header("X-MAS-Supports-Device-Id", "1")
@@ -1279,8 +1287,8 @@ mod tests {
         setup();
         let state = TestState::from_pool(pool).await.unwrap();
 
-        // Check that talking to the introspection endpoint with the bearer token from
-        // the MockHomeserverConnection doens't error out
+        // Check that talking to the introspection endpoint with the bearer
+        // token from the MockHomeserverConnection doens't error out
         let request = Request::post(OAuth2Introspection::PATH)
             .bearer(MockHomeserverConnection::VALID_BEARER_TOKEN)
             .form(json!({ "token": "some_token" }));

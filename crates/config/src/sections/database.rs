@@ -245,8 +245,8 @@ impl ConfigurationSection for DatabaseConfig {
             error
         };
 
-        // Check that the user did not specify both `uri` and the split options at the
-        // same time
+        // Check that the user did not specify both `uri` and the split options
+        // at the same time
         let has_split_options = self.host.is_some()
             || self.port.is_some()
             || self.socket.is_some()
@@ -305,8 +305,8 @@ impl ConfigurationSection for DatabaseConfig {
 }
 #[cfg(test)]
 mod tests {
-    // The closures passed to `Jail::expect_with` return `figment::Error`, which is
-    // large, and we can't change figment's API.
+    // The closures passed to `Jail::expect_with` return `figment::Error`, which
+    // is large, and we can't change figment's API.
     #![expect(clippy::result_large_err)]
 
     use figment::{

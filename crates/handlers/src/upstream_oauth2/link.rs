@@ -261,8 +261,9 @@ pub(crate) async fn get(
         .await?
         .ok_or(RouteError::SessionNotFound(session_id))?;
 
-    // This checks that we're in a browser session which is allowed to consume this
-    // link: the upstream auth session should have been started in this browser.
+    // This checks that we're in a browser session which is allowed to consume
+    // this link: the upstream auth session should have been started in this
+    // browser.
     if upstream_session.link_id() != Some(link.id) {
         return Err(RouteError::SessionNotFound(session_id));
     }
@@ -454,9 +455,9 @@ pub(crate) async fn get(
                 )?
             };
 
-            // We do a bunch of checks for the localpart. Instead of using nested ifs all
-            // the way, we use a labelled block, and use `break` for 'exiting' early when
-            // needed
+            // We do a bunch of checks for the localpart. Instead of using
+            // nested ifs all the way, we use a labelled block, and
+            // use `break` for 'exiting' early when needed
             let localpart = 'localpart: {
                 if provider.claims_imports.localpart.ignore() {
                     break 'localpart None;
@@ -481,9 +482,9 @@ pub(crate) async fn get(
 
                 let forced_or_required = provider.claims_imports.localpart.is_forced_or_required();
 
-                // We got a localpart from the template. We need to check if it's
-                // available, and if it's not apply the conflict resolution setup in
-                // the config
+                // We got a localpart from the template. We need to check if
+                // it's available, and if it's not apply the
+                // conflict resolution setup in the config
                 let maybe_existing_user = repo.user().find_by_username(&localpart).await?;
                 if let Some(existing_user) = maybe_existing_user {
                     if !forced_or_required {
@@ -552,7 +553,8 @@ pub(crate) async fn get(
                             loop {
                                 let page = repo.upstream_oauth_link().list(filter, cursor).await?;
                                 for edge in page.edges {
-                                    // Remove any existing links for this provider and user
+                                    // Remove any existing links for this
+                                    // provider and user
                                     repo.upstream_oauth_link().remove(&clock, edge.node).await?;
                                     cursor = cursor.after(edge.cursor);
                                     removed += 1;
@@ -627,10 +629,12 @@ pub(crate) async fn get(
                         }
                     }
 
-                    // Now that we've resolved the conflict, log in that existing user
+                    // Now that we've resolved the conflict, log in that
+                    // existing user
 
-                    // Check that the user is not locked or deactivated, preserving
-                    // the stashed post-auth action so the interstitial resumes it.
+                    // Check that the user is not locked or deactivated,
+                    // preserving the stashed post-auth
+                    // action so the interstitial resumes it.
                     if existing_user.deactivated_at.is_some() || existing_user.locked_at.is_some() {
                         let (cookie_jar, response) = render_account_inactive(
                             &templates,
@@ -703,8 +707,8 @@ pub(crate) async fn get(
                     })
                     .await?;
 
-                // We don't do a full policy check at this point, only look for violations on
-                // the username
+                // We don't do a full policy check at this point, only look for
+                // violations on the username
                 if res
                     .violations
                     .iter()
@@ -719,8 +723,8 @@ pub(crate) async fn get(
                         break 'localpart None;
                     }
 
-                    // If the username policy check fails, we display an error message.
-                    // TODO: translate
+                    // If the username policy check fails, we display an error
+                    // message. TODO: translate
                     let ctx = ErrorContext::new()
                         .with_code("Policy error")
                         .with_description(format!(
@@ -735,8 +739,9 @@ pub(crate) async fn get(
                     ));
                 }
 
-                // Now let's check if the localpart is allowed by the homeserver. It's possible
-                // that it's plain invalid (although that should have been caught by the
+                // Now let's check if the localpart is allowed by the
+                // homeserver. It's possible that it's plain
+                // invalid (although that should have been caught by the
                 // policy), or just reserved by an application service
                 let is_available = homeserver
                     .is_localpart_available(&localpart)
@@ -804,8 +809,8 @@ pub(crate) async fn get(
 
                 repo.save().await?;
 
-                // Redirect to the user registration flow, in case we have any other step to
-                // finish
+                // Redirect to the user registration flow, in case we have any
+                // other step to finish
                 return Ok((
                     cookie_jar,
                     url_builder
@@ -885,8 +890,9 @@ pub(crate) async fn post(
         .await?
         .ok_or(RouteError::SessionNotFound(session_id))?;
 
-    // This checks that we're in a browser session which is allowed to consume this
-    // link: the upstream auth session should have been started in this browser.
+    // This checks that we're in a browser session which is allowed to consume
+    // this link: the upstream auth session should have been started in this
+    // browser.
     if upstream_session.link_id() != Some(link.id) {
         return Err(RouteError::SessionNotFound(session_id));
     }
@@ -902,8 +908,8 @@ pub(crate) async fn post(
 
     match (maybe_user_session, link.user_id, form) {
         (Some(session), None, FormData::Link) => {
-            // The user is already logged in, the link is not linked to any user, and the
-            // user asked to link their account.
+            // The user is already logged in, the link is not linked to any
+            // user, and the user asked to link their account.
             repo.upstream_oauth_link()
                 .associate_to_user(&link, &session.user)
                 .await?;
@@ -941,10 +947,10 @@ pub(crate) async fn post(
                 accept_terms,
             },
         ) => {
-            // The user got the form to register a new account, and is not logged in.
-            // Depending on the claims_imports, we've let the user choose their username,
-            // choose whether they want to import the email and display name, or
-            // not.
+            // The user got the form to register a new account, and is not
+            // logged in. Depending on the claims_imports, we've let
+            // the user choose their username, choose whether they
+            // want to import the email and display name, or not.
 
             // Those fields are Some("on") if the checkbox is checked
             let import_email = import_email.is_some();
@@ -975,7 +981,8 @@ pub(crate) async fn post(
             }
             let context = context.build();
 
-            // Create a template context in case we need to re-render because of an error
+            // Create a template context in case we need to re-render because of
+            // an error
             let mut ctx = UpstreamRegister::new(link.clone(), provider.clone());
 
             let display_name = if provider
@@ -1042,7 +1049,8 @@ pub(crate) async fn post(
 
                 render_attribute_template(&env, template, &context, true)?
             } else {
-                // If there is no forced username, we can use the one the user entered
+                // If there is no forced username, we can use the one the user
+                // entered
                 username
             }
             .unwrap_or_default();
@@ -1077,12 +1085,14 @@ pub(crate) async fn post(
                         "Homeserver denied username provided by user"
                     );
 
-                    // We defer adding the error on the field, until we know whether we had another
-                    // error from the policy, to avoid showing both
+                    // We defer adding the error on the field, until we know
+                    // whether we had another error from the
+                    // policy, to avoid showing both
                     homeserver_denied_username = true;
                 }
 
-                // If we have a TOS in the config, make sure the user has accepted it
+                // If we have a TOS in the config, make sure the user has
+                // accepted it
                 if site_config.tos_uri.is_some() && !accept_terms {
                     form_state.add_error_on_field(
                         mas_templates::UpstreamRegisterFormField::AcceptTerms,
@@ -1106,7 +1116,8 @@ pub(crate) async fn post(
                 for violation in res.violations {
                     match violation.field.as_deref() {
                         Some("username") => {
-                            // If the homeserver denied the username, but we also had an error on
+                            // If the homeserver denied the username, but we
+                            // also had an error on
                             // the policy side, we don't want to show
                             // both, so we reset the state here
                             homeserver_denied_username = false;
@@ -1126,7 +1137,8 @@ pub(crate) async fn post(
                 }
 
                 if homeserver_denied_username {
-                    // XXX: we may want to return different errors like "this username is reserved"
+                    // XXX: we may want to return different errors like "this
+                    // username is reserved"
                     form_state.add_error_on_field(
                         mas_templates::UpstreamRegisterFormField::Username,
                         FieldError::Exists,
@@ -1182,8 +1194,8 @@ pub(crate) async fn post(
 
             repo.save().await?;
 
-            // Redirect to the user registration flow, in case we have any other step to
-            // finish
+            // Redirect to the user registration flow, in case we have any other
+            // step to finish
             Ok((
                 cookie_jar,
                 url_builder.redirect(&mas_router::RegisterFinish::new(registration.id)),
@@ -1303,8 +1315,8 @@ mod tests {
         });
 
         // Grab a key to sign the id_token
-        // We could generate a key on the fly, but because we have one available here,
-        // why not use it?
+        // We could generate a key on the fly, but because we have one available
+        // here, why not use it?
         let key = state
             .key_store
             .signing_key_for_algorithm(&JsonWebSignatureAlg::Rs256)
@@ -1501,8 +1513,8 @@ mod tests {
         });
 
         // Grab a key to sign the id_token
-        // We could generate a key on the fly, but because we have one available here,
-        // why not use it?
+        // We could generate a key on the fly, but because we have one available
+        // here, why not use it?
         let key = state
             .key_store
             .signing_key_for_algorithm(&JsonWebSignatureAlg::Rs256)
@@ -2010,7 +2022,8 @@ mod tests {
             .await
             .unwrap();
 
-        // Create an existing link for this user and provider with a different subject
+        // Create an existing link for this user and provider with a different
+        // subject
         let old_link = repo
             .upstream_oauth_link()
             .add(
@@ -2279,7 +2292,8 @@ mod tests {
             .await
             .unwrap();
 
-        // Create an existing link for this user and provider with a different subject
+        // Create an existing link for this user and provider with a different
+        // subject
         let old_link = repo
             .upstream_oauth_link()
             .add(
@@ -2325,8 +2339,8 @@ mod tests {
         let response = state.request(request).await;
         cookies.save_cookies(&response);
 
-        // Should return an error page because the user already has a link for this
-        // provider
+        // Should return an error page because the user already has a link for
+        // this provider
         response.assert_status(StatusCode::OK);
         response.assert_header_value(CONTENT_TYPE, "text/html; charset=utf-8");
 

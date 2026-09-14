@@ -307,7 +307,8 @@ impl SecretsConfig {
     ///
     /// Returns an error when the encryption secret could not be read from file.
     pub async fn encryption(&self) -> anyhow::Result<[u8; 32]> {
-        // Read the encryption secret either embedded in the config file or on disk
+        // Read the encryption secret either embedded in the config file or on
+        // disk
         match self.encryption {
             Encryption::Value(encryption) => Ok(encryption),
             Encryption::File(ref path) => {
@@ -467,8 +468,8 @@ impl SecretsConfig {
 
 #[cfg(test)]
 mod tests {
-    // The closures passed to `Jail::expect_with` return `figment::Error`, which is
-    // large, and we can't change figment's API.
+    // The closures passed to `Jail::expect_with` return `figment::Error`, which
+    // is large, and we can't change figment's API.
     #![expect(clippy::result_large_err)]
 
     use figment::{

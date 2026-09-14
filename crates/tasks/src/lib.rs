@@ -101,7 +101,6 @@ impl State {
     pub fn site_config(&self) -> &SiteConfig {
         &self.site_config
     }
-
 }
 
 /// Initialise the worker, without running it.

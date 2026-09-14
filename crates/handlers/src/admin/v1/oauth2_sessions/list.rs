@@ -796,7 +796,8 @@ mod tests {
         assert!(ids.contains(&session_b_id.as_str()));
         assert_eq!(ids.len(), 2);
 
-        // The self/first/last links should preserve both filter[client] segments
+        // The self/first/last links should preserve both filter[client]
+        // segments
         let self_link = body["links"]["self"].as_str().unwrap();
         assert!(self_link.contains(&format!("filter[client]={}", client_a.id)));
         assert!(self_link.contains(&format!("filter[client]={}", client_b.id)));

@@ -97,8 +97,7 @@ impl ConvertClient {
         else {
             return false;
         };
-        let Some(provided) = signature
-            .and_then(|value| value.trim().strip_prefix("sha256="))
+        let Some(provided) = signature.and_then(|value| value.trim().strip_prefix("sha256="))
         else {
             return false;
         };
@@ -158,7 +157,9 @@ impl ConvertClient {
                     if !payload.success {
                         return Err(ConvertError::Rejected {
                             status: StatusCode::OK,
-                            body: payload.error.unwrap_or_else(|| "message rejected".to_owned()),
+                            body: payload
+                                .error
+                                .unwrap_or_else(|| "message rejected".to_owned()),
                         });
                     }
                     return Ok(DeliveryReceipt {
@@ -185,19 +186,27 @@ impl ConvertClient {
 
     /// Generate a stable key for one OTP delivery attempt.
     #[must_use]
-pub fn idempotency_key(authentication_id: Ulid) -> String {
+    pub fn idempotency_key(authentication_id: Ulid) -> String {
         format!("tween-phone-otp-{authentication_id}")
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use mas_config::ConvertConfig;
-    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::{header, method, path}};
+    use wiremock::{
+        Mock, MockServer, ResponseTemplate,
+        matchers::{header, method, path},
+    };
+
+    use super::*;
 
     fn config(server: &MockServer) -> ConvertConfig {
-        ConvertConfig { base_url: server.uri(), api_key: Some("rk_test".into()), ..Default::default() }
+        ConvertConfig {
+            base_url: server.uri(),
+            api_key: Some("rk_test".into()),
+            ..Default::default()
+        }
     }
 
     fn install_crypto_provider() {
@@ -216,9 +225,13 @@ mod tests {
                 "success": true, "channel": "whatsapp", "status": "accepted", "message_id": "msg_1"
             })))
             .expect(1)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
 
-        let receipt = ConvertClient::new(&config(&server)).send_phone_otp("+2348012345678", "123456", "key-1").await.unwrap();
+        let receipt = ConvertClient::new(&config(&server))
+            .send_phone_otp("+2348012345678", "123456", "key-1")
+            .await
+            .unwrap();
         assert_eq!(receipt.channel, "whatsapp");
         assert_eq!(receipt.message_id.as_deref(), Some("msg_1"));
     }
@@ -232,24 +245,45 @@ mod tests {
             .and(header("Idempotency-Key", "key-2"))
             .respond_with(ResponseTemplate::new(503))
             .up_to_n_times(2)
-            .mount(&server).await;
+            .mount(&server)
+            .await;
         Mock::given(method("POST"))
             .and(path("/messages"))
             .and(header("Idempotency-Key", "key-2"))
-            .respond_with(ResponseTemplate::new(201).set_body_json(serde_json::json!({"success":true,"channel":"sms"})))
-            .mount(&server).await;
+            .respond_with(
+                ResponseTemplate::new(201)
+                    .set_body_json(serde_json::json!({"success":true,"channel":"sms"})),
+            )
+            .mount(&server)
+            .await;
 
-        assert!(ConvertClient::new(&config(&server)).send_phone_otp("+2348012345678", "123456", "key-2").await.is_ok());
+        assert!(
+            ConvertClient::new(&config(&server))
+                .send_phone_otp("+2348012345678", "123456", "key-2")
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn does_not_retry_client_errors() {
         install_crypto_provider();
         let server = MockServer::start().await;
-        Mock::given(method("POST")).and(path("/messages"))
+        Mock::given(method("POST"))
+            .and(path("/messages"))
             .respond_with(ResponseTemplate::new(400).set_body_string("invalid"))
-            .expect(1).mount(&server).await;
-        assert!(matches!(ConvertClient::new(&config(&server)).send_phone_otp("+1", "123456", "key-3").await, Err(ConvertError::Rejected { status: StatusCode::BAD_REQUEST, .. })));
+            .expect(1)
+            .mount(&server)
+            .await;
+        assert!(matches!(
+            ConvertClient::new(&config(&server))
+                .send_phone_otp("+1", "123456", "key-3")
+                .await,
+            Err(ConvertError::Rejected {
+                status: StatusCode::BAD_REQUEST,
+                ..
+            })
+        ));
     }
 
     #[test]

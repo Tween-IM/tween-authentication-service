@@ -108,8 +108,8 @@ impl Object for AttributeMappingContext {
 }
 
 fn b64decode(value: &str) -> Result<Value, Error> {
-    // We're not too concerned about the performance of this filter, so we'll just
-    // try all the base64 variants when decoding
+    // We're not too concerned about the performance of this filter, so we'll
+    // just try all the base64 variants when decoding
     let bytes = Base64::decode_vec(value)
         .or_else(|_| Base64Url::decode_vec(value))
         .or_else(|_| Base64Unpadded::decode_vec(value))
@@ -122,8 +122,9 @@ fn b64decode(value: &str) -> Result<Value, Error> {
             .with_source(e)
         })?;
 
-    // It is not obvious, but the cleanest way to get a Value stored as raw bytes is
-    // to wrap it in an Arc, because Value implements From<Arc<Vec<u8>>>
+    // It is not obvious, but the cleanest way to get a Value stored as raw
+    // bytes is to wrap it in an Arc, because Value implements
+    // From<Arc<Vec<u8>>>
     Ok(Value::from(Arc::new(bytes)))
 }
 
@@ -135,8 +136,8 @@ fn b64encode(bytes: &[u8]) -> String {
 fn tlvdecode(bytes: &[u8]) -> Result<HashMap<Value, Value>, Error> {
     let mut iter = bytes.iter().copied();
     let mut ret = HashMap::new();
-    // TODO: this assumes the tag and the length are both single bytes, which is not
-    // always the case with protobufs. We should properly decode varints
+    // TODO: this assumes the tag and the length are both single bytes, which is
+    // not always the case with protobufs. We should properly decode varints
     // here.
     while let Some(tag) = iter.next() {
         let len = iter

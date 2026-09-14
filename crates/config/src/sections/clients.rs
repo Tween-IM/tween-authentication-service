@@ -262,8 +262,8 @@ impl ConfigurationSection for ClientsConfig {
 
 #[cfg(test)]
 mod tests {
-    // The closures passed to `Jail::expect_with` return `figment::Error`, which is
-    // large, and we can't change figment's API.
+    // The closures passed to `Jail::expect_with` return `figment::Error`, which
+    // is large, and we can't change figment's API.
     #![expect(clippy::result_large_err)]
 
     use std::str::FromStr;

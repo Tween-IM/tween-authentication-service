@@ -242,8 +242,8 @@ impl OidcProvider {
         let id = Ulid::from_datetime_with_rng(now, rng);
 
         let token_endpoint_auth_method = self.client_auth_method.unwrap_or_else(|| {
-            // The token auth method defaults to 'none' if no client_secret is set and
-            // 'client_secret_basic' otherwise
+            // The token auth method defaults to 'none' if no client_secret is
+            // set and 'client_secret_basic' otherwise
             if self.client_secret.is_some() {
                 UpstreamOAuth2TokenAuthMethod::ClientSecretBasic
             } else {
@@ -269,8 +269,8 @@ impl OidcProvider {
             }
         };
 
-        // "auto" doesn't mean the same thing depending on whether we request the openid
-        // scope or not
+        // "auto" doesn't mean the same thing depending on whether we request
+        // the openid scope or not
         let has_openid_scope = scope.contains(&OPENID);
         let fetch_userinfo = match self.user_profile_method {
             UserProfileMethod::Auto => has_openid_scope,
@@ -283,8 +283,8 @@ impl OidcProvider {
             }
         };
 
-        // Check if there is a `response_mode` set in the additional authorization
-        // parameters
+        // Check if there is a `response_mode` set in the additional
+        // authorization parameters
         let mut additional_authorization_parameters = self.additional_authorization_parameters;
         let response_mode = if let Some(response_mode) =
             additional_authorization_parameters.remove("response_mode")

@@ -141,7 +141,10 @@ impl UserPhoneRepository for PgUserPhoneRepository<'_> {
             query.push(" AND phone_number = ").push_bind(phone_number);
         }
 
-        let count: i64 = query.build_query_scalar().fetch_one(&mut *self.conn).await?;
+        let count: i64 = query
+            .build_query_scalar()
+            .fetch_one(&mut *self.conn)
+            .await?;
 
         Ok(usize::try_from(count).unwrap_or(usize::MAX))
     }

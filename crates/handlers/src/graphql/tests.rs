@@ -22,7 +22,9 @@ use oauth2_types::{
 use sqlx::PgPool;
 use zeroize::Zeroizing;
 
-use crate::test_utils::{self, CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, test_site_config};
+use crate::test_utils::{
+    self, CookieHelper, RequestBuilderExt, ResponseExt, TestState, setup, test_site_config,
+};
 
 async fn create_test_client(state: &TestState) -> Client {
     let mut repo = state.repository().await.unwrap();
@@ -528,9 +530,9 @@ async fn test_oauth2_client_credentials(pool: PgPool) {
         })
     );
 
-    // XXX: we don't run the task worker here, so even though the addUser mutation
-    // should have scheduled a job to provision the user, it won't run in the test,
-    // so we need to do it manually
+    // XXX: we don't run the task worker here, so even though the addUser
+    // mutation should have scheduled a job to provision the user, it won't
+    // run in the test, so we need to do it manually
     state
         .homeserver_connection
         .provision_user(&ProvisionRequest::new("alice", user_id, false))
@@ -1179,7 +1181,9 @@ async fn test_register_user_initiate_requires_email(pool: PgPool) {
         "{:?}",
         response.data
     );
-    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    let errors = response.data["registerUserInitiate"]["errors"]
+        .as_array()
+        .unwrap();
     assert!(errors.iter().any(|e| e["field"].as_str() == Some("email")));
 }
 
@@ -1219,7 +1223,9 @@ async fn test_register_user_initiate_invalid_email(pool: PgPool) {
         "{:?}",
         response.data
     );
-    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
+    let errors = response.data["registerUserInitiate"]["errors"]
+        .as_array()
+        .unwrap();
     assert!(errors.iter().any(|e| e["field"].as_str() == Some("email")));
 }
 
@@ -1266,8 +1272,14 @@ async fn test_register_user_initiate_weak_password(pool: PgPool) {
         "{:?}",
         response.data
     );
-    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
-    assert!(errors.iter().any(|e| e["field"].as_str() == Some("password")));
+    let errors = response.data["registerUserInitiate"]["errors"]
+        .as_array()
+        .unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["field"].as_str() == Some("password"))
+    );
 }
 
 /// Test that registerUserInitiate fails when username is taken.
@@ -1321,8 +1333,14 @@ async fn test_register_user_initiate_username_taken(pool: PgPool) {
         "{:?}",
         response.data
     );
-    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
-    assert!(errors.iter().any(|e| e["field"].as_str() == Some("username")));
+    let errors = response.data["registerUserInitiate"]["errors"]
+        .as_array()
+        .unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["field"].as_str() == Some("username"))
+    );
 }
 
 /// Test that registerUserInitiate fails when password confirm doesn't match.
@@ -1368,11 +1386,18 @@ async fn test_register_user_initiate_password_mismatch(pool: PgPool) {
         "{:?}",
         response.data
     );
-    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
-    assert!(errors.iter().any(|e| e["field"].as_str() == Some("password_confirm")));
+    let errors = response.data["registerUserInitiate"]["errors"]
+        .as_array()
+        .unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["field"].as_str() == Some("password_confirm"))
+    );
 }
 
-/// Test that registerUserInitiate fails when terms are required but not accepted.
+/// Test that registerUserInitiate fails when terms are required but not
+/// accepted.
 #[sqlx::test(migrator = "mas_storage_pg::MIGRATOR")]
 async fn test_register_user_initiate_terms_required(pool: PgPool) {
     setup();
@@ -1414,8 +1439,14 @@ async fn test_register_user_initiate_terms_required(pool: PgPool) {
         "{:?}",
         response.data
     );
-    let errors = response.data["registerUserInitiate"]["errors"].as_array().unwrap();
-    assert!(errors.iter().any(|e| e["field"].as_str() == Some("accept_terms")));
+    let errors = response.data["registerUserInitiate"]["errors"]
+        .as_array()
+        .unwrap();
+    assert!(
+        errors
+            .iter()
+            .any(|e| e["field"].as_str() == Some("accept_terms"))
+    );
 }
 
 /// Test the full email verification registration flow.
@@ -1462,7 +1493,10 @@ async fn test_complete_registration_email_verification(pool: PgPool) {
         .as_array()
         .unwrap();
     assert_eq!(next_steps.len(), 1);
-    assert_eq!(next_steps[0]["stepType"].as_str(), Some("EMAIL_VERIFICATION"));
+    assert_eq!(
+        next_steps[0]["stepType"].as_str(),
+        Some("EMAIL_VERIFICATION")
+    );
 
     // Step 2: Run queued jobs to generate the verification code
     state.run_jobs_in_queue().await;
@@ -1586,11 +1620,10 @@ async fn test_complete_registration_expired_session(pool: PgPool) {
     response.assert_status(StatusCode::OK);
     let response: GraphQLResponse = response.json();
     assert!(
-        response.errors.iter().any(|e| {
-            e["message"]
-                .as_str()
-                .is_some_and(|m| m.contains("expired"))
-        }),
+        response
+            .errors
+            .iter()
+            .any(|e| { e["message"].as_str().is_some_and(|m| m.contains("expired")) }),
         "Expected session expired error, got: {:?}",
         response.errors
     );

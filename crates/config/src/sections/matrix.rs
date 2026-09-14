@@ -134,7 +134,8 @@ impl MatrixConfig {
         Ok(match &self.secret {
             Secret::File(path) => {
                 let raw = tokio::fs::read_to_string(path).await?;
-                // Trim the secret when read from file to match Synapse's behaviour
+                // Trim the secret when read from file to match Synapse's
+                // behaviour
                 raw.trim().to_string()
             }
             Secret::Value(secret) => secret.clone(),
@@ -165,8 +166,8 @@ impl MatrixConfig {
 
 #[cfg(test)]
 mod tests {
-    // The closures passed to `Jail::expect_with` return `figment::Error`, which is
-    // large, and we can't change figment's API.
+    // The closures passed to `Jail::expect_with` return `figment::Error`, which
+    // is large, and we can't change figment's API.
     #![expect(clippy::result_large_err)]
 
     use figment::{

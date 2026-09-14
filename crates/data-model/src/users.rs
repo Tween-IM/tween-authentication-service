@@ -201,8 +201,9 @@ pub struct UserEmail {
 /// A phone number owned by a [`User`], in E.164.
 ///
 /// Verified numbers used to end at `matrix_msisdn_validations`, which expires
-/// with the request that proved them; this is where a number lives once the user
-/// claims it, which is what makes it usable for sign-in and one-time codes.
+/// with the request that proved them; this is where a number lives once the
+/// user claims it, which is what makes it usable for sign-in and one-time
+/// codes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct UserPhone {
     pub id: Ulid,

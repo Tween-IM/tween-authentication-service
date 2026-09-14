@@ -108,7 +108,8 @@ pub async fn load_session_or_fallback(
     };
 
     let Some(session) = repo.browser_session().lookup(session_id).await? else {
-        // We looked up the session, but it was not found. Still update the cookie
+        // We looked up the session, but it was not found. Still update the
+        // cookie
         let session_info = session_info.mark_session_ended(clock.now());
         let cookie_jar = cookie_jar.update_session_info(&session_info);
         return Ok(SessionOrFallback::MaybeSession {
@@ -121,9 +122,10 @@ pub async fn load_session_or_fallback(
     // below — the request is still attributable to that user.
     session.maybe_record_as_requester();
 
-    // The account is deactivated or locked, or the session has finished out-of-band
-    // (a 'remote' logout triggered by an admin or from the user-management UI). In
-    // any of these cases, show the matching account-inactive interstitial.
+    // The account is deactivated or locked, or the session has finished
+    // out-of-band (a 'remote' logout triggered by an admin or from the
+    // user-management UI). In any of these cases, show the matching
+    // account-inactive interstitial.
     if session.user.deactivated_at.is_some()
         || session.user.locked_at.is_some()
         || session.finished_at.is_some()
@@ -187,7 +189,8 @@ pub(crate) async fn count_user_sessions_for_limiting(
         .count(CompatSessionFilter::new().active_only().for_user(user))
         .await? as u64;
 
-    // Only include self-owned personal sessions, not administratively-owned ones
+    // Only include self-owned personal sessions, not administratively-owned
+    // ones
     let personal = repo
         .personal_session()
         .count(

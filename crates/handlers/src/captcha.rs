@@ -11,7 +11,6 @@ use mas_http::RequestBuilderExt as _;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-
 // https://developers.google.com/recaptcha/docs/verify#api_request
 const RECAPTCHA_VERIFY_URL: &str = "https://www.recaptcha.net/recaptcha/api/siteverify";
 
@@ -242,8 +241,8 @@ impl Form {
             ));
         }
 
-        // If the response is successful, we should have both the hostname and the
-        // challenge_ts
+        // If the response is successful, we should have both the hostname and
+        // the challenge_ts
         let Some(hostname) = response.hostname else {
             return Err(Error::InvalidResponse);
         };

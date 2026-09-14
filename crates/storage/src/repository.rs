@@ -26,8 +26,7 @@ use crate::{
         UpstreamOAuthSessionRepository,
     },
     user::{
-        BrowserSessionRepository, UserEmailRepository, UserPasswordRepository,
-        UserPhoneRepository,
+        BrowserSessionRepository, UserEmailRepository, UserPasswordRepository, UserPhoneRepository,
         UserRecoveryRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
         UserRepository, UserTermsRepository,
     },
@@ -270,9 +269,9 @@ mod impls {
             UpstreamOAuthSessionRepository,
         },
         user::{
-            BrowserSessionRepository, UserEmailRepository, UserPasswordRepository,            UserPhoneRepository,
-            UserRegistrationRepository, UserRegistrationTokenRepository, UserRepository,
-            UserTermsRepository,
+            BrowserSessionRepository, UserEmailRepository, UserPasswordRepository,
+            UserPhoneRepository, UserRegistrationRepository, UserRegistrationTokenRepository,
+            UserRepository, UserTermsRepository,
         },
     };
 

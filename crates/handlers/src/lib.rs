@@ -58,15 +58,15 @@ use self::{graphql::ExtraRouterParameters, passwords::PasswordManager};
 
 mod admin;
 mod compat;
+mod convert;
 mod graphql;
 mod health;
+mod identity;
 mod oauth2;
 pub mod passwords;
+mod recovery;
 pub mod upstream_oauth2;
 mod views;
-mod identity;
-mod convert;
-mod recovery;
 
 mod activity_tracker;
 mod captcha;
@@ -138,11 +138,26 @@ where
     BoxRng: FromRequestParts<S>,
 {
     Router::new()
-        .route("/_matrix/identity/api/v2/validate/msisdn/requestToken", post(identity::request_token))
-        .route("/_matrix/identity/api/v2/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
-        .route("/_matrix/identity/api/v2/validate/msisdn/claim", post(identity::claim))
-        .route("/_matrix/identity/api/v1/validate/msisdn/requestToken", post(identity::request_token))
-        .route("/_matrix/identity/api/v1/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
+        .route(
+            "/_matrix/identity/api/v2/validate/msisdn/requestToken",
+            post(identity::request_token),
+        )
+        .route(
+            "/_matrix/identity/api/v2/validate/msisdn/submitToken",
+            post(identity::submit_token).get(identity::submit_token_get),
+        )
+        .route(
+            "/_matrix/identity/api/v2/validate/msisdn/claim",
+            post(identity::claim),
+        )
+        .route(
+            "/_matrix/identity/api/v1/validate/msisdn/requestToken",
+            post(identity::request_token),
+        )
+        .route(
+            "/_matrix/identity/api/v1/validate/msisdn/submitToken",
+            post(identity::submit_token).get(identity::submit_token_get),
+        )
 }
 
 /// Account recovery for the app: request a code, check it, choose a new

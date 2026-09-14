@@ -15,8 +15,8 @@ use ulid::Ulid;
 use crate::{Page, Pagination, repository_impl};
 
 mod email;
-mod phone;
 mod password;
+mod phone;
 mod recovery;
 mod registration;
 mod registration_token;
@@ -25,8 +25,8 @@ mod terms;
 
 pub use self::{
     email::{UserEmailFilter, UserEmailRepository},
-    phone::{UserPhoneFilter, UserPhoneRepository},
     password::UserPasswordRepository,
+    phone::{UserPhoneFilter, UserPhoneRepository},
     recovery::UserRecoveryRepository,
     registration::UserRegistrationRepository,
     registration_token::{UserRegistrationTokenFilter, UserRegistrationTokenRepository},

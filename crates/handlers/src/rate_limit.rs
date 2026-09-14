@@ -106,8 +106,8 @@ impl<S: Send + Sync> FromRequestParts<S> for RequesterFingerprint {
         if let Some(ip) = ip {
             Ok(Self::new(ip))
         } else {
-            // If we can't infer the IP address, we'll just use an empty fingerprint and
-            // warn about it
+            // If we can't infer the IP address, we'll just use an empty
+            // fingerprint and warn about it
             tracing::warn!(
                 "Could not infer client IP address for an operation which rate-limits based on IP addresses"
             );
@@ -246,8 +246,8 @@ impl Limiter {
             .check_key(&requester)
             .map_err(|_| AccountRecoveryLimitedError::Requester(requester))?;
 
-        // Convert to lowercase to prevent bypassing the limit by enumerating different
-        // case variations.
+        // Convert to lowercase to prevent bypassing the limit by enumerating
+        // different case variations.
         // A case-folding transformation may be more proper.
         let canonical_email = email_address.to_lowercase();
         self.inner
@@ -329,8 +329,8 @@ impl Limiter {
             .check_key(&requester)
             .map_err(|_| EmailAuthenticationLimitedError::Requester(requester))?;
 
-        // Convert to lowercase to prevent bypassing the limit by enumerating different
-        // case variations.
+        // Convert to lowercase to prevent bypassing the limit by enumerating
+        // different case variations.
         // A case-folding transformation may be more proper.
         let canonical_email = email.to_lowercase();
         self.inner
@@ -468,11 +468,13 @@ mod tests {
         // Using another user should also be rejected
         assert!(limiter.check_password(requesters[0], &bob).is_err());
 
-        // Using a different IP address should be allowed, the account isn't locked yet
+        // Using a different IP address should be allowed, the account isn't
+        // locked yet
         assert!(limiter.check_password(requesters[1], &alice).is_ok());
 
-        // At this point, we consumed 4 cells out of 1800 on alice, let's distribute the
-        // requests with other IPs so that we get rate-limited on the account-level
+        // At this point, we consumed 4 cells out of 1800 on alice, let's
+        // distribute the requests with other IPs so that we get
+        // rate-limited on the account-level
         for requester in requesters.iter().skip(2).take(598) {
             assert!(limiter.check_password(*requester, &alice).is_ok());
             assert!(limiter.check_password(*requester, &alice).is_ok());
@@ -480,8 +482,8 @@ mod tests {
             assert!(limiter.check_password(*requester, &alice).is_err());
         }
 
-        // We now have consumed 4+598*3 = 1798 cells on the account, so we should be
-        // rejected soon
+        // We now have consumed 4+598*3 = 1798 cells on the account, so we
+        // should be rejected soon
         assert!(limiter.check_password(requesters[600], &alice).is_ok());
         assert!(limiter.check_password(requesters[601], &alice).is_ok());
         assert!(limiter.check_password(requesters[602], &alice).is_err());

@@ -352,7 +352,8 @@ mod tests {
         let response = state.request(request).await;
         response.assert_status(StatusCode::OK);
         let body: serde_json::Value = response.json();
-        // The "Static Client" plus any clients created by the test harness as static
+        // The "Static Client" plus any clients created by the test harness as
+        // static
         for client in body["data"].as_array().unwrap() {
             assert_eq!(client["attributes"]["is_static"], true);
         }

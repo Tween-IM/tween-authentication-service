@@ -107,8 +107,8 @@ pub(crate) async fn get(
 
     let providers = repo.upstream_oauth_provider().all_enabled().await?;
 
-    // If password-based login is disabled, and there is only one upstream provider,
-    // we can directly start an authorization flow
+    // If password-based login is disabled, and there is only one upstream
+    // provider, we can directly start an authorization flow
     if !site_config.password_login_enabled && providers.len() == 1 {
         let provider = providers.into_iter().next().unwrap();
 
@@ -244,8 +244,8 @@ pub(crate) async fn post(
 
     // And its password
     let Some(user_password) = repo.user_password().active(&user).await? else {
-        // There is no password for this user, but we don't want to disclose that. Show
-        // a generic 'invalid credentials' error instead
+        // There is no password for this user, but we don't want to disclose
+        // that. Show a generic 'invalid credentials' error instead
         tracing::warn!(username, "No password for user");
         let form_state = form_state.with_error_on_form(FormError::InvalidCredentials);
         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
@@ -313,9 +313,10 @@ pub(crate) async fn post(
         Err(err) => return Err(InternalError::from_anyhow(err)),
     };
 
-    // Now that we have checked the user password, we now want to show an error if
-    // the user is locked or deactivated, while preserving the post-auth action so
-    // the sign-in button on the interstitial resumes the flow the user started.
+    // Now that we have checked the user password, we now want to show an error
+    // if the user is locked or deactivated, while preserving the post-auth
+    // action so the sign-in button on the interstitial resumes the flow the
+    // user started.
     if user.deactivated_at.is_some() {
         tracing::warn!(username, "User is deactivated");
         PASSWORD_LOGIN_COUNTER.add(1, &[KeyValue::new(RESULT, "error")]);
@@ -346,8 +347,8 @@ pub(crate) async fn post(
         return Ok((cookie_jar, response).into_response());
     }
 
-    // At this point, we should have a 'valid' user. In case we missed something, we
-    // want it to crash in tests/debug builds
+    // At this point, we should have a 'valid' user. In case we missed
+    // something, we want it to crash in tests/debug builds
     debug_assert!(user.is_valid());
 
     // Start a new session
@@ -583,8 +584,8 @@ mod test {
 
         let mut rng = state.rng();
 
-        // Without password login and no upstream providers, we should get an error
-        // message
+        // Without password login and no upstream providers, we should get an
+        // error message
         let response = state.request(Request::get("/login").empty()).await;
         response.assert_status(StatusCode::OK);
         response.assert_header_value(CONTENT_TYPE, "text/html; charset=utf-8");
@@ -862,8 +863,8 @@ mod test {
         let cookies = CookieHelper::new();
 
         // Provision a user without a password.
-        // We don't give that user a password, so that we skip hashing it in this test.
-        // It will still be rate-limited
+        // We don't give that user a password, so that we skip hashing it in
+        // this test. It will still be rate-limited
         let mut repo = state.repository().await.unwrap();
         repo.user()
             .add(&mut rng, &state.clock, "john".to_owned())
@@ -1096,8 +1097,8 @@ mod test {
         repo.user().lock(&state.clock, user).await.unwrap();
         repo.save().await.unwrap();
 
-        // The consent handler falls back to the interstitial before even looking
-        // up the grant, so any grant id exercises the path.
+        // The consent handler falls back to the interstitial before even
+        // looking up the grant, so any grant id exercises the path.
         let request = Request::get(format!("/consent/{GRANT_ID}")).empty();
         let request = cookies.with_cookies(request);
         let response = state.request(request).await;
