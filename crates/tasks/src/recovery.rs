@@ -11,14 +11,14 @@ use mas_data_model::recovery_code_ticket;
 use mas_email::{Address, Mailbox};
 use mas_i18n::DataLocale;
 use mas_storage::{
+    Pagination, RepositoryAccess,
     queue::{SendAccountRecoveryEmailsJob, SendRecoveryCodeEmailJob},
     user::{UserEmailFilter, UserRecoveryRepository},
-    Pagination, RepositoryAccess,
 };
 use mas_templates::{EmailRecoveryCodeContext, EmailRecoveryContext, TemplateContext};
 use rand::{
-    distributions::{Alphanumeric, DistString, Uniform},
     Rng as _,
+    distributions::{Alphanumeric, DistString, Uniform},
 };
 use tracing::{error, info};
 

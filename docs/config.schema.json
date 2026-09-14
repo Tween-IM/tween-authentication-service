@@ -2031,6 +2031,10 @@
             "per_address": {
               "burst": 3,
               "per_second": 0.0002777777777777778
+            },
+            "attempt_per_session": {
+              "burst": 10,
+              "per_second": 0.016666666666666666
             }
           },
           "allOf": [
@@ -2139,6 +2143,18 @@
           "default": {
             "burst": 3,
             "per_second": 0.0002777777777777778
+          },
+          "allOf": [
+            {
+              "$ref": "#/definitions/RateLimiterConfiguration"
+            }
+          ]
+        },
+        "attempt_per_session": {
+          "description": "Controls how many code submissions are permitted per recovery session.\nThis protects against brute-forcing the six-digit code.\n\nThis is deliberately separate from the limits above: those guard\nagainst e-mail being used as a weapon, and a person checking the code\nthey were just sent must not spend that budget.",
+          "default": {
+            "burst": 10,
+            "per_second": 0.016666666666666666
           },
           "allOf": [
             {

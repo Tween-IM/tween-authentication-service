@@ -15,22 +15,22 @@
 use std::str::FromStr as _;
 
 use anyhow::Context as _;
-use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
+use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use chrono::{DateTime, Utc};
 use mas_axum_utils::InternalError;
-use mas_data_model::{recovery_code_ticket, BoxClock, BoxRng, SiteConfig};
+use mas_data_model::{BoxClock, BoxRng, SiteConfig, recovery_code_ticket};
 use mas_storage::{
+    BoxRepository, RepositoryAccess,
     queue::{QueueJobRepositoryExt as _, SendRecoveryCodeEmailJob},
     user::{UserEmailRepository, UserPasswordRepository, UserRecoveryRepository, UserRepository},
-    BoxRepository, RepositoryAccess,
 };
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
 use zeroize::Zeroizing;
 
 use crate::{
-    passwords::PasswordManager, BoundActivityTracker, Limiter, PreferredLanguage,
-    RequesterFingerprint,
+    BoundActivityTracker, Limiter, PreferredLanguage, RequesterFingerprint,
+    passwords::PasswordManager,
 };
 
 /// The user agent recorded on sessions started from the app, which has no
@@ -152,7 +152,6 @@ pub async fn verify(
     mut repo: BoxRepository,
     State(limiter): State<Limiter>,
     State(site_config): State<SiteConfig>,
-    fingerprint: RequesterFingerprint,
     Json(payload): Json<CodePayload>,
 ) -> Result<axum::response::Response, InternalError> {
     if !site_config.account_recovery_allowed {
@@ -171,15 +170,20 @@ pub async fn verify(
         ));
     };
 
-    let Some(session) = repo.user_recovery().lookup_session(session_id).await? else {
+    if repo
+        .user_recovery()
+        .lookup_session(session_id)
+        .await?
+        .is_none()
+    {
         return Ok(error(
             StatusCode::NOT_FOUND,
             "M_NOT_FOUND",
             "Unknown recovery session",
         ));
-    };
+    }
 
-    if let Err(e) = limiter.check_account_recovery(fingerprint, &session.email) {
+    if let Err(e) = limiter.check_account_recovery_attempt(session_id) {
         tracing::warn!(
             error = &e as &dyn std::error::Error,
             "Recovery rate limited"
@@ -217,7 +221,6 @@ pub async fn reset(
     State(limiter): State<Limiter>,
     State(password_manager): State<PasswordManager>,
     State(site_config): State<SiteConfig>,
-    fingerprint: RequesterFingerprint,
     Json(payload): Json<ResetPayload>,
 ) -> Result<axum::response::Response, InternalError> {
     if !site_config.account_recovery_allowed || !password_manager.is_enabled() {
@@ -244,7 +247,7 @@ pub async fn reset(
         ));
     };
 
-    if let Err(e) = limiter.check_account_recovery(fingerprint, &session.email) {
+    if let Err(e) = limiter.check_account_recovery_attempt(session_id) {
         tracing::warn!(
             error = &e as &dyn std::error::Error,
             "Recovery rate limited"

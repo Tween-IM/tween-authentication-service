@@ -77,6 +77,15 @@ pub struct AccountRecoveryRateLimitingConfig {
     /// Note: this limit also applies to re-sends.
     #[serde(default = "default_account_recovery_per_address")]
     pub per_address: RateLimiterConfiguration,
+
+    /// Controls how many code submissions are permitted per recovery session.
+    /// This protects against brute-forcing the six-digit code.
+    ///
+    /// This is deliberately separate from the limits above: those guard
+    /// against e-mail being used as a weapon, and a person checking the code
+    /// they were just sent must not spend that budget.
+    #[serde(default = "default_account_recovery_attempt_per_session")]
+    pub attempt_per_session: RateLimiterConfiguration,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, JsonSchema, PartialEq)]
@@ -187,6 +196,11 @@ impl ConfigurationSection for RateLimitingConfig {
         if let Some(error) = error_on_limiter(&self.account_recovery.per_address) {
             return Err(error_on_nested_field(error, "account_recovery", "per_address").into());
         }
+        if let Some(error) = error_on_limiter(&self.account_recovery.attempt_per_session) {
+            return Err(
+                error_on_nested_field(error, "account_recovery", "attempt_per_session").into(),
+            );
+        }
 
         if let Some(error) = error_on_limiter(&self.registration) {
             return Err(error_on_field(error, "registration").into());
@@ -251,6 +265,13 @@ fn default_account_recovery_per_address() -> RateLimiterConfiguration {
     RateLimiterConfiguration {
         burst: NonZeroU32::new(3).unwrap(),
         per_second: 1.0 / 3600.0,
+    }
+}
+
+fn default_account_recovery_attempt_per_session() -> RateLimiterConfiguration {
+    RateLimiterConfiguration {
+        burst: NonZeroU32::new(10).unwrap(),
+        per_second: 1.0 / 60.0,
     }
 }
 
@@ -339,6 +360,7 @@ impl Default for AccountRecoveryRateLimitingConfig {
         AccountRecoveryRateLimitingConfig {
             per_ip: default_account_recovery_per_ip(),
             per_address: default_account_recovery_per_address(),
+            attempt_per_session: default_account_recovery_attempt_per_session(),
         }
     }
 }

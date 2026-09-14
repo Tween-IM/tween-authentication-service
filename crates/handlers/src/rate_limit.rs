@@ -22,6 +22,9 @@ pub enum AccountRecoveryLimitedError {
 
     #[error("Too many account recovery requests for e-mail {0}")]
     Email(String),
+
+    #[error("Too many code submissions for recovery session {0}")]
+    Session(Ulid),
 }
 
 #[derive(Debug, Clone, Copy, thiserror::Error)]
@@ -125,6 +128,7 @@ type KeyedRateLimiter<K> = RateLimiter<K, DashMapStateStore<K>, QuantaClock>;
 struct LimiterInner {
     account_recovery_per_requester: KeyedRateLimiter<RequesterFingerprint>,
     account_recovery_per_email: KeyedRateLimiter<String>,
+    account_recovery_attempt_per_session: KeyedRateLimiter<Ulid>,
     password_check_for_requester: KeyedRateLimiter<RequesterFingerprint>,
     password_check_for_user: KeyedRateLimiter<Ulid>,
     registration_per_requester: KeyedRateLimiter<RequesterFingerprint>,
@@ -145,6 +149,9 @@ impl LimiterInner {
             ),
             account_recovery_per_email: RateLimiter::keyed(
                 config.account_recovery.per_address.to_quota()?,
+            ),
+            account_recovery_attempt_per_session: RateLimiter::keyed(
+                config.account_recovery.attempt_per_session.to_quota()?,
             ),
             password_check_for_requester: RateLimiter::keyed(config.login.per_ip.to_quota()?),
             password_check_for_user: RateLimiter::keyed(config.login.per_account.to_quota()?),
@@ -202,6 +209,9 @@ impl Limiter {
                 // Call the retain_recent method on each rate limiter
                 this.inner.account_recovery_per_email.retain_recent();
                 this.inner.account_recovery_per_requester.retain_recent();
+                this.inner
+                    .account_recovery_attempt_per_session
+                    .retain_recent();
                 this.inner.password_check_for_requester.retain_recent();
                 this.inner.password_check_for_user.retain_recent();
                 this.inner.registration_per_requester.retain_recent();
@@ -246,6 +256,21 @@ impl Limiter {
             .map_err(|_| AccountRecoveryLimitedError::Email(canonical_email))?;
 
         Ok(())
+    }
+
+    /// Check if a recovery code can be submitted for a recovery session
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the operation is rate limited.
+    pub fn check_account_recovery_attempt(
+        &self,
+        session_id: Ulid,
+    ) -> Result<(), AccountRecoveryLimitedError> {
+        self.inner
+            .account_recovery_attempt_per_session
+            .check_key(&session_id)
+            .map_err(|_| AccountRecoveryLimitedError::Session(session_id))
     }
 
     /// Check if a password check can be performed
