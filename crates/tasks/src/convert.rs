@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use hmac::{Hmac, Mac};
 use mas_config::{ConvertChannel, ConvertConfig};
+use mas_http::RequestBuilderExt as _;
 use reqwest::{Client, StatusCode, header};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -138,7 +139,7 @@ impl ConvertClient {
                 .header(header::AUTHORIZATION, format!("Bearer {api_key}"))
                 .header("Idempotency-Key", idempotency_key)
                 .json(&body)
-                .send()
+                .send_traced()
                 .await;
 
             match response {
