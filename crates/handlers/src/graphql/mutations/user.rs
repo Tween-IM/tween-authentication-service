@@ -457,7 +457,7 @@ struct RegisterUserInitiateInput {
     /// Optional registration token. Required if server config says so.
     registration_token: Option<String>,
 
-    /// Whether the user accepts the terms of service. Required if the server has a ToS.
+    /// Whether the user accepts the terms of service. Required if the server has a `ToS`.
     accept_terms: Option<bool>,
 
     /// The language to use for emails.
@@ -484,7 +484,9 @@ pub enum RegisterUserInitiateStatus {
 /// The payload for the `registerUserInitiate` mutation.
 #[derive(Description)]
 pub enum RegisterUserInitiatePayload {
-    Complete(mas_data_model::User, mas_data_model::BrowserSession),
+    // Boxed: a user and a browser session outweigh every other variant, as in
+    // the session payloads that box their one big variant.
+    Complete(Box<(mas_data_model::User, mas_data_model::BrowserSession)>),
     Pending {
         session_id: ID,
         next_steps: Vec<RegistrationStep>,
@@ -515,7 +517,7 @@ pub struct RegistrationFieldError {
 impl RegisterUserInitiatePayload {
     async fn status(&self) -> RegisterUserInitiateStatus {
         match self {
-            Self::Complete(_, _) => RegisterUserInitiateStatus::Complete,
+            Self::Complete(_) => RegisterUserInitiateStatus::Complete,
             Self::Pending { .. } => RegisterUserInitiateStatus::Pending,
             Self::Failed(_) => RegisterUserInitiateStatus::Failed,
         }
@@ -523,15 +525,15 @@ impl RegisterUserInitiatePayload {
 
     async fn user(&self) -> Option<User> {
         match self {
-            Self::Complete(user, _) => Some(User(user.clone())),
+            Self::Complete(inner) => Some(User(inner.0.clone())),
             _ => None,
         }
     }
 
     async fn browser_session(&self) -> Option<crate::graphql::model::BrowserSession> {
         match self {
-            Self::Complete(_, session) => {
-                Some(crate::graphql::model::BrowserSession(session.clone()))
+            Self::Complete(inner) => {
+                Some(crate::graphql::model::BrowserSession(inner.1.clone()))
             }
             _ => None,
         }
@@ -563,7 +565,7 @@ impl RegisterUserInitiatePayload {
 struct CompleteRegistrationStepInput {
     session_id: ID,
     step_type: RegistrationStepType,
-    /// Step-specific data. For EmailVerification: JSON {"code": "123456"}
+    /// Step-specific data. For `EmailVerification`: JSON `{"code": "123456"}`
     data: Option<Json<serde_json::Value>>,
 }
 
@@ -577,7 +579,8 @@ pub enum CompleteRegistrationStepStatus {
 /// The payload for the `completeRegistrationStep` mutation.
 #[derive(Description)]
 pub enum CompleteRegistrationStepPayload {
-    Complete(mas_data_model::User, mas_data_model::BrowserSession),
+    /// Boxed for the same reason as [`RegisterUserInitiatePayload`].
+    Complete(Box<(mas_data_model::User, mas_data_model::BrowserSession)>),
     Pending {
         next_steps: Vec<RegistrationStep>,
     },
@@ -588,7 +591,7 @@ pub enum CompleteRegistrationStepPayload {
 impl CompleteRegistrationStepPayload {
     async fn status(&self) -> CompleteRegistrationStepStatus {
         match self {
-            Self::Complete(_, _) => CompleteRegistrationStepStatus::Complete,
+            Self::Complete(_) => CompleteRegistrationStepStatus::Complete,
             Self::Pending { .. } => CompleteRegistrationStepStatus::Pending,
             Self::Failed(_) => CompleteRegistrationStepStatus::Failed,
         }
@@ -596,14 +599,14 @@ impl CompleteRegistrationStepPayload {
 
     async fn user(&self) -> Option<User> {
         match self {
-            Self::Complete(u, _) => Some(User(u.clone())),
+            Self::Complete(inner) => Some(User(inner.0.clone())),
             _ => None,
         }
     }
 
     async fn browser_session(&self) -> Option<crate::graphql::model::BrowserSession> {
         match self {
-            Self::Complete(_, s) => Some(crate::graphql::model::BrowserSession(s.clone())),
+            Self::Complete(inner) => Some(crate::graphql::model::BrowserSession(inner.1.clone())),
             _ => None,
         }
     }
@@ -1264,13 +1267,13 @@ impl UserMutations {
         }
 
         // Validate password confirmation
-        if let Some(ref confirm) = input.password_confirm {
-            if *confirm != input.password {
-                errors.push(RegistrationFieldError {
-                    field: "password_confirm".to_owned(),
-                    message: "Passwords do not match".to_owned(),
-                });
-            }
+        if let Some(ref confirm) = input.password_confirm
+            && *confirm != input.password
+        {
+            errors.push(RegistrationFieldError {
+                field: "password_confirm".to_owned(),
+                message: "Passwords do not match".to_owned(),
+            });
         }
 
         // Validate email if required
@@ -1377,16 +1380,17 @@ impl UserMutations {
                 });
             }
 
-            if let Some(ref email) = email {
-                if let Err(e) = limiter.check_email_authentication_email(requester.fingerprint(), email) {
-                    tracing::warn!(error = &e as &dyn std::error::Error);
-                    errors.push(RegistrationFieldError {
-                        field: "email".to_owned(),
-                        message:
-                            "Too many attempts on this email address. Please wait an hour, or use a different address."
-                                .to_owned(),
-                    });
-                }
+            if let Some(ref email) = email
+                && let Err(e) =
+                    limiter.check_email_authentication_email(requester.fingerprint(), email)
+            {
+                tracing::warn!(error = &e as &dyn std::error::Error);
+                errors.push(RegistrationFieldError {
+                    field: "email".to_owned(),
+                    message:
+                        "Too many attempts on this email address. Please wait an hour, or use a different address."
+                            .to_owned(),
+                });
             }
         }
 
@@ -1516,7 +1520,7 @@ impl UserMutations {
             )
             .await?;
             repo.save().await?;
-            return Ok(RegisterUserInitiatePayload::Complete(user, session));
+            return Ok(RegisterUserInitiatePayload::Complete(Box::new((user, session))));
         }
 
         repo.save().await?;
@@ -1655,7 +1659,7 @@ impl UserMutations {
             )
             .await?;
             repo.save().await?;
-            return Ok(CompleteRegistrationStepPayload::Complete(user, session));
+            return Ok(CompleteRegistrationStepPayload::Complete(Box::new((user, session))));
         }
 
         repo.save().await?;

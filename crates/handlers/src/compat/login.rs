@@ -993,12 +993,12 @@ async fn user_password_login(
     }
 
     // Check the rate limit
-    limiter.check_password(requester, &user)?;
+    limiter.check_password(requester, user)?;
 
     // Lookup its password
     let user_password = repo
         .user_password()
-        .active(&user)
+        .active(user)
         .await?
         .ok_or(RouteError::NoPassword)?;
 
@@ -1020,7 +1020,7 @@ async fn user_password_login(
                 .add(
                     &mut rng,
                     clock,
-                    &user,
+                    user,
                     version,
                     hashed_password,
                     Some(&user_password),
@@ -1035,7 +1035,7 @@ async fn user_password_login(
 
     // We're about to create a device, let's explicitly acquire a lock, so that
     // any concurrent sync will read after we've committed
-    repo.user().acquire_lock_for_sync(&user).await?;
+    repo.user().acquire_lock_for_sync(user).await?;
 
     // Now that the user credentials have been verified, start a new compat session
     let device = if let Some(requested_device_id) = requested_device_id {
@@ -1046,28 +1046,28 @@ async fn user_password_login(
 
     let session_replaced = repo
         .app_session()
-        .finish_sessions_to_replace_device(clock, &user, &device)
+        .finish_sessions_to_replace_device(clock, user, &device)
         .await?;
 
-    let session_counts = count_user_sessions_for_limiting(repo, &user).await?;
+    let session_counts = count_user_sessions_for_limiting(repo, user).await?;
 
     let res = policy
         .evaluate_compat_login(mas_policy::CompatLoginInput {
-            user: &user,
+            user,
             login: CompatLogin::Password,
             session_replaced,
             session_counts,
             requester: policy_requester,
         })
         .await?;
-    process_violations_for_compat_login(rng, clock, repo, session_limit_config, &user, res).await?;
+    process_violations_for_compat_login(rng, clock, repo, session_limit_config, user, res).await?;
 
     let session = repo
         .compat_session()
         .add(
             &mut rng,
             clock,
-            &user,
+            user,
             device,
             None,
             false,

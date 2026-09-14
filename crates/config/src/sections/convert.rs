@@ -8,10 +8,10 @@ use super::ConfigurationSection;
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ConvertChannel {
-    /// Let Convert prefer WhatsApp and fall back to SMS.
+    /// Let Convert prefer `WhatsApp` and fall back to SMS.
     #[default]
     Smart,
-    /// Deliver through WhatsApp.
+    /// Deliver through `WhatsApp`.
     Whatsapp,
     /// Deliver through SMS.
     Sms,

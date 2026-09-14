@@ -1471,7 +1471,7 @@ async fn test_complete_registration_email_verification(pool: PgPool) {
     let session_ulid = ulid::Ulid::from_string(session_id).unwrap();
     let session_uuid: sqlx::types::Uuid = session_ulid.into();
     let code: String = sqlx::query_scalar(
-        r#"
+        r"
             SELECT c.code
             FROM user_email_authentication_codes c
             JOIN user_email_authentications a
@@ -1479,7 +1479,7 @@ async fn test_complete_registration_email_verification(pool: PgPool) {
             JOIN user_registrations r
               ON a.user_registration_id = r.user_registration_id
             WHERE r.user_registration_id = $1
-        "#,
+        ",
     )
     .bind(session_uuid)
     .fetch_one(&pool)
@@ -1488,7 +1488,7 @@ async fn test_complete_registration_email_verification(pool: PgPool) {
 
     // Step 4: Complete the email verification step
     let request = Request::post("/graphql").json(serde_json::json!({
-        "query": r#"
+        "query": r"
             mutation CompleteStep($input: CompleteRegistrationStepInput!) {
                 completeRegistrationStep(input: $input) {
                     status
@@ -1501,7 +1501,7 @@ async fn test_complete_registration_email_verification(pool: PgPool) {
                     }
                 }
             }
-        "#,
+        ",
         "variables": {
             "input": {
                 "sessionId": session_id,
@@ -1566,13 +1566,13 @@ async fn test_complete_registration_expired_session(pool: PgPool) {
 
     // Try to complete the step
     let request = Request::post("/graphql").json(serde_json::json!({
-        "query": r#"
+        "query": r"
             mutation CompleteStep($input: CompleteRegistrationStepInput!) {
                 completeRegistrationStep(input: $input) {
                     status
                 }
             }
-        "#,
+        ",
         "variables": {
             "input": {
                 "sessionId": session_id,
@@ -1589,8 +1589,7 @@ async fn test_complete_registration_expired_session(pool: PgPool) {
         response.errors.iter().any(|e| {
             e["message"]
                 .as_str()
-                .map(|m| m.contains("expired"))
-                .unwrap_or(false)
+                .is_some_and(|m| m.contains("expired"))
         }),
         "Expected session expired error, got: {:?}",
         response.errors

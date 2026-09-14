@@ -1718,12 +1718,12 @@
       "description": "Convert delivery channel used for phone verification messages.",
       "oneOf": [
         {
-          "description": "Let Convert prefer WhatsApp and fall back to SMS.",
+          "description": "Let Convert prefer `WhatsApp` and fall back to SMS.",
           "type": "string",
           "const": "smart"
         },
         {
-          "description": "Deliver through WhatsApp.",
+          "description": "Deliver through `WhatsApp`.",
           "type": "string",
           "const": "whatsapp"
         },

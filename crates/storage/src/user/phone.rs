@@ -39,11 +39,13 @@ impl<'a> UserPhoneFilter<'a> {
     }
 
     /// Get the [`User`] to filter by
+    #[must_use]
     pub fn user(&self) -> Option<&User> {
         self.user
     }
 
     /// Get the phone number to filter by
+    #[must_use]
     pub fn phone_number(&self) -> Option<&str> {
         self.phone_number
     }

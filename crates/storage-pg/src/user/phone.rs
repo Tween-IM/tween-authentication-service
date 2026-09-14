@@ -54,16 +54,16 @@ impl<'c> PgUserPhoneRepository<'c> {
 }
 
 #[async_trait]
-impl<'c> UserPhoneRepository for PgUserPhoneRepository<'c> {
+impl UserPhoneRepository for PgUserPhoneRepository<'_> {
     type Error = DatabaseError;
 
     async fn lookup(&mut self, id: Ulid) -> Result<Option<UserPhone>, Self::Error> {
         let res = sqlx::query_as::<_, UserPhoneLookup>(
-            r#"
+            r"
                 SELECT user_phone_id AS id, user_id, phone_number, created_at
                 FROM user_phones
                 WHERE user_phone_id = $1
-            "#,
+            ",
         )
         .bind(Uuid::from(id))
         .traced()
@@ -78,11 +78,11 @@ impl<'c> UserPhoneRepository for PgUserPhoneRepository<'c> {
         phone_number: &str,
     ) -> Result<Option<UserPhone>, Self::Error> {
         let res = sqlx::query_as::<_, UserPhoneLookup>(
-            r#"
+            r"
                 SELECT user_phone_id AS id, user_id, phone_number, created_at
                 FROM user_phones
                 WHERE phone_number = $1
-            "#,
+            ",
         )
         .bind(phone_number)
         .traced()
@@ -98,11 +98,11 @@ impl<'c> UserPhoneRepository for PgUserPhoneRepository<'c> {
         phone_number: &str,
     ) -> Result<Option<UserPhone>, Self::Error> {
         let res = sqlx::query_as::<_, UserPhoneLookup>(
-            r#"
+            r"
                 SELECT user_phone_id AS id, user_id, phone_number, created_at
                 FROM user_phones
                 WHERE user_id = $1 AND phone_number = $2
-            "#,
+            ",
         )
         .bind(Uuid::from(user.id))
         .bind(phone_number)
@@ -115,12 +115,12 @@ impl<'c> UserPhoneRepository for PgUserPhoneRepository<'c> {
 
     async fn all(&mut self, user: &User) -> Result<Vec<UserPhone>, Self::Error> {
         let res = sqlx::query_as::<_, UserPhoneLookup>(
-            r#"
+            r"
                 SELECT user_phone_id AS id, user_id, phone_number, created_at
                 FROM user_phones
                 WHERE user_id = $1
                 ORDER BY created_at
-            "#,
+            ",
         )
         .bind(Uuid::from(user.id))
         .traced()
@@ -143,7 +143,7 @@ impl<'c> UserPhoneRepository for PgUserPhoneRepository<'c> {
 
         let count: i64 = query.build_query_scalar().fetch_one(&mut *self.conn).await?;
 
-        Ok(count as usize)
+        Ok(usize::try_from(count).unwrap_or(usize::MAX))
     }
 
     async fn add(
@@ -163,10 +163,10 @@ impl<'c> UserPhoneRepository for PgUserPhoneRepository<'c> {
         });
 
         sqlx::query(
-            r#"
+            r"
                 INSERT INTO user_phones (user_phone_id, user_id, phone_number, created_at)
                 VALUES ($1, $2, $3, $4)
-            "#,
+            ",
         )
         .bind(Uuid::from(id))
         .bind(Uuid::from(user.id))

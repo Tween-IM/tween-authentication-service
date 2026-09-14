@@ -1,5 +1,13 @@
-use axum::{Json, extract::{Query, State}, http::StatusCode, response::{IntoResponse, Redirect}};
+use axum::{
+    Json,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Redirect},
+};
+use axum_extra::extract::Query;
+use mas_data_model::{BoxClock, BoxRng, UlidExt as _};
 use mas_tasks::convert::ConvertClient;
+use rand::{Rng as _, distributions::Uniform};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use ulid::Ulid;
@@ -25,6 +33,8 @@ pub async fn request_token(
     State(pool): State<PgPool>,
     State(convert): State<ConvertClient>,
     State(limiter): State<Limiter>,
+    clock: BoxClock,
+    mut rng: BoxRng,
     fingerprint: RequesterFingerprint,
     Json(input): Json<RequestToken>,
 ) -> impl IntoResponse {
@@ -36,8 +46,10 @@ pub async fn request_token(
     {
         return (StatusCode::BAD_REQUEST, Json(serde_json::json!({"errcode":"M_INVALID_PARAM","error":"Invalid phone verification parameters"})));
     }
-    let sid = Ulid::new().to_string();
-    let code = format!("{:06}", rand::random::<u32>() % 1_000_000);
+    // ULIDs and the code both come from the workspace rng, not the thread's,
+    // so a request's randomness is injectable like everywhere else.
+    let sid = Ulid::from_datetime_with_rng(clock.now(), &mut rng).to_string();
+    let code = format!("{:06}", rng.sample(Uniform::<u32>::from(0..1_000_000)));
     let secret_hash = sha256(&input.client_secret);
     // Convert only accepts E.164 for WhatsApp and SMS, so a national number has
     // to be composed with the country the client sent.
@@ -54,9 +66,8 @@ pub async fn request_token(
     let inserted = sqlx::query("INSERT INTO matrix_msisdn_validations (sid, client_secret_hash, phone_number, token_hash, next_link, expires_at) VALUES ($1,$2,$3,$4,$5,now()+interval '5 minutes')")
         .bind(&sid).bind(secret_hash).bind(&phone).bind(sha256(&code)).bind(next_link).execute(&pool).await;
     if inserted.is_err() { return (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not create validation session"}))); }
-    let receipt = match convert.send_phone_otp(&phone, &code, &format!("matrix-msisdn-{sid}")).await {
-        Ok(receipt) => receipt,
-        Err(_) => return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not deliver validation code"}))),
+    let Ok(receipt) = convert.send_phone_otp(&phone, &code, &format!("matrix-msisdn-{sid}")).await else {
+        return (StatusCode::BAD_GATEWAY, Json(serde_json::json!({"errcode":"M_UNKNOWN","error":"Could not deliver validation code"})));
     };
     // Convert's message_id is acceptance, not delivery — recording it is what
     // lets a later delivery webhook find this session. Best effort: the message

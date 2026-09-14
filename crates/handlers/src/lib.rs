@@ -134,6 +134,8 @@ where
     PgPool: FromRef<S>,
     mas_tasks::convert::ConvertClient: FromRef<S>,
     Limiter: FromRef<S>,
+    BoxClock: FromRequestParts<S>,
+    BoxRng: FromRequestParts<S>,
 {
     Router::new()
         .route("/_matrix/identity/api/v2/validate/msisdn/requestToken", post(identity::request_token))

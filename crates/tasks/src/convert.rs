@@ -9,7 +9,7 @@ use sha2::Sha256;
 use thiserror::Error;
 use ulid::Ulid;
 
-const MAX_ATTEMPTS: usize = 3;
+const MAX_ATTEMPTS: u32 = 3;
 
 /// Errors returned while delivering a phone verification message.
 #[derive(Debug, Error)]
@@ -105,13 +105,23 @@ impl ConvertClient {
         let Ok(provided) = hex::decode(provided) else {
             return false;
         };
-        let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-            .expect("HMAC accepts keys of any length");
+        // `Hmac` takes a key of any length, so this cannot fail. If it ever
+        // did, the signature is not one we can verify — which is not something
+        // to accept, and not a reason to bring down the webhook handler.
+        let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(secret.as_bytes()) else {
+            return false;
+        };
         mac.update(body);
         mac.verify_slice(&provided).is_ok()
     }
 
     /// Send a phone verification OTP through the configured Convert channel.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ConvertError::NotConfigured`] when no API key is set,
+    /// [`ConvertError::Rejected`] when Convert refuses the message, and
+    /// [`ConvertError::Request`] when it cannot be reached.
     pub async fn send_phone_otp(
         &self,
         phone_number: &str,
@@ -167,7 +177,7 @@ impl ConvertClient {
                 Err(_) => {}
             }
 
-            tokio::time::sleep(Duration::from_millis(250 * 2_u64.pow(attempt as u32))).await;
+            tokio::time::sleep(Duration::from_millis(250 * 2_u64.pow(attempt))).await;
         }
 
         unreachable!("the retry loop always returns")
