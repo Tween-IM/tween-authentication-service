@@ -40,12 +40,12 @@ pub use self::{
     context::{
         AccountInactiveContext, ApiDocContext, AppContext, CompatLoginPolicyViolationContext,
         CompatSsoContext, ConsentContext, DeviceConsentContext, DeviceLinkContext,
-        DeviceLinkFormField, DeviceNameContext, EmailRecoveryContext, EmailVerificationContext,
-        EmptyContext, ErrorContext, FormPostContext, IndexContext, LoginContext, LoginFormField,
-        NotFoundContext, PasswordRegisterContext, PolicyViolationContext, PostAuthContext,
-        PostAuthContextInner, RecoveryExpiredContext, RecoveryFinishContext,
-        RecoveryFinishFormField, RecoveryProgressContext, RecoveryStartContext,
-        RecoveryStartFormField, RegisterContext, RegisterFormField,
+        DeviceLinkFormField, DeviceNameContext, EmailRecoveryCodeContext, EmailRecoveryContext,
+        EmailVerificationContext, EmptyContext, ErrorContext, FormPostContext, IndexContext,
+        LoginContext, LoginFormField, NotFoundContext, PasswordRegisterContext,
+        PolicyViolationContext, PostAuthContext, PostAuthContextInner, RecoveryExpiredContext,
+        RecoveryFinishContext, RecoveryFinishFormField, RecoveryProgressContext,
+        RecoveryStartContext, RecoveryStartFormField, RegisterContext, RegisterFormField,
         RegisterStepsDisplayNameContext, RegisterStepsDisplayNameFormField,
         RegisterStepsEmailInUseContext, RegisterStepsRegistrationTokenContext,
         RegisterStepsRegistrationTokenFormField, RegisterStepsVerifyEmailContext,
@@ -436,6 +436,15 @@ register_templates! {
 
     /// Render the email recovery subject
     pub fn render_email_recovery_subject(WithLanguage<EmailRecoveryContext>) { "emails/recovery.subject" }
+
+    /// Render the recovery code email (plain text variant)
+    pub fn render_email_recovery_code_txt(WithLanguage<EmailRecoveryCodeContext>) { "emails/recovery_code.txt" }
+
+    /// Render the recovery code email (HTML variant)
+    pub fn render_email_recovery_code_html(WithLanguage<EmailRecoveryCodeContext>) { "emails/recovery_code.html" }
+
+    /// Render the recovery code subject
+    pub fn render_email_recovery_code_subject(WithLanguage<EmailRecoveryCodeContext>) { "emails/recovery_code.subject" }
 
     /// Render the email verification email (plain text variant)
     pub fn render_email_verification_txt(WithLanguage<EmailVerificationContext>) { "emails/verification.txt" }

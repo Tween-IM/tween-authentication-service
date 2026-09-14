@@ -7,15 +7,19 @@
 
 use anyhow::Context;
 use async_trait::async_trait;
+use mas_data_model::recovery_code_ticket;
 use mas_email::{Address, Mailbox};
 use mas_i18n::DataLocale;
 use mas_storage::{
-    Pagination, RepositoryAccess,
-    queue::SendAccountRecoveryEmailsJob,
+    queue::{SendAccountRecoveryEmailsJob, SendRecoveryCodeEmailJob},
     user::{UserEmailFilter, UserRecoveryRepository},
+    Pagination, RepositoryAccess,
 };
-use mas_templates::{EmailRecoveryContext, TemplateContext};
-use rand::distributions::{Alphanumeric, DistString};
+use mas_templates::{EmailRecoveryCodeContext, EmailRecoveryContext, TemplateContext};
+use rand::{
+    distributions::{Alphanumeric, DistString, Uniform},
+    Rng as _,
+};
 use tracing::{error, info};
 
 use crate::{
@@ -102,6 +106,104 @@ impl RunnableJob for SendAccountRecoveryEmailsJob {
                     error!(
                         error = &e as &dyn std::error::Error,
                         "Failed to send recovery email"
+                    );
+                }
+
+                cursor = cursor.after(edge.cursor);
+            }
+
+            if !page.has_next_page {
+                break;
+            }
+        }
+
+        repo.save().await.map_err(JobError::fail)?;
+
+        Ok(())
+    }
+}
+
+/// Job to send an account recovery code for a given recovery session.
+///
+/// Mirrors [`SendAccountRecoveryEmailsJob`], but mails a code instead of a
+/// link: the app has no page to land a link on, so the person types the code
+/// back in.
+#[async_trait]
+impl RunnableJob for SendRecoveryCodeEmailJob {
+    #[tracing::instrument(
+        name = "job.send_recovery_code_email",
+        fields(
+            user_recovery_session.id = %self.user_recovery_session_id(),
+            user_recovery_session.email,
+        ),
+        skip_all,
+    )]
+    async fn run(&self, state: &State, _context: JobContext) -> Result<(), JobError> {
+        let clock = state.clock();
+        let mailer = state.mailer();
+        let mut rng = state.rng();
+        let mut repo = state.repository().await.map_err(JobError::retry)?;
+
+        let session = repo
+            .user_recovery()
+            .lookup_session(self.user_recovery_session_id())
+            .await
+            .map_err(JobError::retry)?
+            .context("User recovery session not found")
+            .map_err(JobError::fail)?;
+
+        tracing::Span::current().record("user_recovery_session.email", &session.email);
+
+        if session.consumed_at.is_some() {
+            info!("Recovery session already consumed, not sending email");
+            return Ok(());
+        }
+
+        let lang: DataLocale = session
+            .locale
+            .parse()
+            .context("Invalid locale in database on recovery session")
+            .map_err(JobError::fail)?;
+
+        // One code per session, so every address belonging to the same person
+        // accepts the same code.
+        let code = format!("{:06}", rng.sample(Uniform::<u32>::from(0..1_000_000)));
+        let ticket = recovery_code_ticket(session.id, &code);
+
+        let mut cursor = Pagination::first(50);
+
+        loop {
+            let page = repo
+                .user_email()
+                .list(UserEmailFilter::new().for_email(&session.email), cursor)
+                .await
+                .map_err(JobError::retry)?;
+
+            for edge in page.edges {
+                repo.user_recovery()
+                    .add_ticket(&mut rng, clock, &session, &edge.node, ticket.clone())
+                    .await
+                    .map_err(JobError::retry)?;
+
+                let user = repo
+                    .user()
+                    .lookup(edge.node.user_id)
+                    .await
+                    .map_err(JobError::retry)?
+                    .context("User not found")
+                    .map_err(JobError::fail)?;
+
+                let address: Address = edge.node.email.parse().map_err(JobError::fail)?;
+                let mailbox = Mailbox::new(Some(user.username.clone()), address);
+
+                info!("Sending recovery code to {}", mailbox);
+                let context = EmailRecoveryCodeContext::new(user, code.clone()).with_language(lang);
+
+                // Failures are logged: one bad address must not stop the loop.
+                if let Err(e) = mailer.send_recovery_code_email(mailbox, &context).await {
+                    error!(
+                        error = &e as &dyn std::error::Error,
+                        "Failed to send recovery code email"
                     );
                 }
 

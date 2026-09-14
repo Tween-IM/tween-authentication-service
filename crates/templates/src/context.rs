@@ -1100,6 +1100,58 @@ impl TemplateContext for EmailVerificationContext {
     }
 }
 
+/// Context used by the `emails/recovery_code.{txt,html,subject}` templates
+///
+/// The recovery email this fork ships is link-based, and the page that link
+/// pointed at is gone from the SPA. This one carries a code instead, so a
+/// person can finish on the phone they started on.
+#[derive(Serialize)]
+pub struct EmailRecoveryCodeContext {
+    user: User,
+    code: String,
+}
+
+impl EmailRecoveryCodeContext {
+    /// Constructs a context for the recovery code email
+    #[must_use]
+    pub fn new(user: User, code: String) -> Self {
+        Self { user, code }
+    }
+
+    /// The code being sent
+    #[must_use]
+    pub fn code(&self) -> &str {
+        &self.code
+    }
+
+    /// The user the code is for
+    #[must_use]
+    pub fn user(&self) -> &User {
+        &self.user
+    }
+}
+
+impl TemplateContext for EmailRecoveryCodeContext {
+    fn sample<R: Rng>(
+        now: chrono::DateTime<Utc>,
+        rng: &mut R,
+        _locales: &[DataLocale],
+    ) -> BTreeMap<SampleIdentifier, Self>
+    where
+        Self: Sized,
+    {
+        sample_list(
+            User::samples(now, rng)
+                .into_iter()
+                .map(|user| Self {
+                    user,
+                    code: "123456".to_owned(),
+                })
+                .collect(),
+        )
+    }
+}
+
 /// Fields of the email verification form
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]

@@ -66,6 +66,7 @@ pub mod upstream_oauth2;
 mod views;
 mod identity;
 mod convert;
+mod recovery;
 
 mod activity_tracker;
 mod captcha;
@@ -140,6 +141,29 @@ where
         .route("/_matrix/identity/api/v2/validate/msisdn/claim", post(identity::claim))
         .route("/_matrix/identity/api/v1/validate/msisdn/requestToken", post(identity::request_token))
         .route("/_matrix/identity/api/v1/validate/msisdn/submitToken", post(identity::submit_token).get(identity::submit_token_get))
+}
+
+/// Account recovery for the app: request a code, check it, choose a new
+/// password. Mounted unconditionally, next to the identity endpoints the app
+/// already talks to.
+pub fn recovery_router<S>() -> Router<S>
+where
+    S: Clone + Send + Sync + 'static,
+    BoxRepository: FromRequestParts<S>,
+    BoxClock: FromRequestParts<S>,
+    BoxRng: FromRequestParts<S>,
+    ActivityTracker: FromRequestParts<S>,
+    BoundActivityTracker: FromRequestParts<S>,
+    RequesterFingerprint: FromRequestParts<S>,
+    PreferredLanguage: FromRequestParts<S>,
+    Limiter: FromRef<S>,
+    SiteConfig: FromRef<S>,
+    PasswordManager: FromRef<S>,
+{
+    Router::new()
+        .route("/recovery/request", post(recovery::request))
+        .route("/recovery/verify", post(recovery::verify))
+        .route("/recovery/reset", post(recovery::reset))
 }
 
 /// Convert delivery webhooks. Mounted unconditionally: the client already

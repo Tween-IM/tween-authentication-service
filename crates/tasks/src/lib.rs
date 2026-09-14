@@ -152,6 +152,7 @@ pub async fn init(
         .register_handler::<mas_storage::queue::ProvisionUserJob>()
         .register_handler::<mas_storage::queue::ReactivateUserJob>()
         .register_handler::<mas_storage::queue::SendAccountRecoveryEmailsJob>()
+        .register_handler::<mas_storage::queue::SendRecoveryCodeEmailJob>()
         .register_handler::<mas_storage::queue::SendEmailAuthenticationCodeJob>()
         .register_handler::<mas_storage::queue::SyncDevicesJob>()
         .register_handler::<mas_storage::queue::VerifyEmailJob>()

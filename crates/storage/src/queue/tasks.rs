@@ -318,6 +318,36 @@ impl InsertableJob for SendAccountRecoveryEmailsJob {
     const QUEUE_NAME: &'static str = "send-account-recovery-email";
 }
 
+/// Send an account recovery code by e-mail
+///
+/// The link-based counterpart is [`SendAccountRecoveryEmailsJob`]. The app has
+/// no browser page to land a recovery link on, so that flow mails a code that
+/// the person types back into the app instead.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SendRecoveryCodeEmailJob {
+    user_recovery_session_id: Ulid,
+}
+
+impl SendRecoveryCodeEmailJob {
+    /// Create a new job to send account recovery codes
+    #[must_use]
+    pub fn new(user_recovery_session: &UserRecoverySession) -> Self {
+        Self {
+            user_recovery_session_id: user_recovery_session.id,
+        }
+    }
+
+    /// The ID of the user recovery session to send the codes for
+    #[must_use]
+    pub fn user_recovery_session_id(&self) -> Ulid {
+        self.user_recovery_session_id
+    }
+}
+
+impl InsertableJob for SendRecoveryCodeEmailJob {
+    const QUEUE_NAME: &'static str = "send-recovery-code-email";
+}
+
 /// Cleanup revoked OAuth 2.0 access tokens
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct CleanupRevokedOAuthAccessTokensJob;

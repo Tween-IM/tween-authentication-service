@@ -14,7 +14,7 @@ mod transport;
 pub use lettre::{
     Address, message::Mailbox, transport::smtp::authentication::Credentials as SmtpCredentials,
 };
-pub use mas_templates::EmailVerificationContext;
+pub use mas_templates::{EmailRecoveryCodeContext, EmailVerificationContext};
 
 pub use self::{
     mailer::Mailer,

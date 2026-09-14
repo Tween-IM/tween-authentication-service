@@ -1,0 +1,8 @@
+Hi {{ user.username }},
+
+Use this code to choose a new Tween password:
+
+    {{ code }}
+
+It expires in fifteen minutes. If you did not ask for it, you can ignore this email —
+your password has not changed.

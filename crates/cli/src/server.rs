@@ -274,6 +274,7 @@ pub fn build_router(
 ) -> Router<()> {
     let templates = Templates::from_ref(&state);
     let mut router = mas_handlers::identity_router::<AppState>()
+        .merge(mas_handlers::recovery_router::<AppState>())
         .merge(mas_handlers::convert_router::<AppState>());
 
     for resource in resources {

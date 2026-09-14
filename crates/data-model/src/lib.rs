@@ -61,6 +61,6 @@ pub use self::{
         UserPhone, UserEmailAuthenticationCode, UserRecoverySession,
         UserRecoveryTicket, UserRegistration, UserRegistrationPassword, UserRegistrationToken,
     },
-    utils::{BoxClock, BoxRng, UlidExt},
+    utils::{BoxClock, BoxRng, UlidExt, recovery_code_ticket},
     version::AppVersion,
 };

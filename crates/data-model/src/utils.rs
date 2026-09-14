@@ -7,6 +7,7 @@
 use chrono::{DateTime, Utc};
 use rand::Rng;
 use rand_chacha::rand_core::CryptoRngCore;
+use sha2::{Digest as _, Sha256};
 use ulid::Ulid;
 
 use crate::clock::Clock;
@@ -44,5 +45,54 @@ impl UlidExt for Ulid {
     fn datetime_utc(&self) -> DateTime<Utc> {
         DateTime::from_timestamp_millis(i64::try_from(self.timestamp_ms()).unwrap_or(i64::MAX))
             .unwrap_or_default()
+    }
+}
+
+/// Derive the value stored for an account recovery code.
+///
+/// A recovery code is only six digits, so two sessions recovering at the same
+/// time can easily draw the same one. Folding the recovery session's ULID into
+/// the hash keeps every stored ticket unique to the session it belongs to, and
+/// keeps the code itself out of the database in the clear.
+#[must_use]
+pub fn recovery_code_ticket(session_id: Ulid, code: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(session_id.to_string().as_bytes());
+    hasher.update(b":");
+    hasher.update(code.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recovery_ticket_is_scoped_to_its_session() {
+        let session = Ulid::from_string("01J0RZ4N0P7E5A9F2C6B3D8H5K").unwrap();
+        let other = Ulid::from_string("01J0RZ4N0P7E5A9F2C6B3D8H5M").unwrap();
+
+        assert_eq!(
+            recovery_code_ticket(session, "123456"),
+            recovery_code_ticket(session, "123456")
+        );
+        assert_ne!(
+            recovery_code_ticket(session, "123456"),
+            recovery_code_ticket(other, "123456")
+        );
+        assert_ne!(
+            recovery_code_ticket(session, "123456"),
+            recovery_code_ticket(session, "123457")
+        );
+    }
+
+    #[test]
+    fn a_recovery_ticket_does_not_carry_the_code() {
+        let session = Ulid::from_string("01J0RZ4N0P7E5A9F2C6B3D8H5K").unwrap();
+        let ticket = recovery_code_ticket(session, "123456");
+
+        assert!(!ticket.contains("123456"));
+        assert_eq!(ticket.len(), 64);
+        assert!(ticket.bytes().all(|b| b.is_ascii_hexdigit()));
     }
 }
